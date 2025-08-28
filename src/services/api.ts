@@ -42,6 +42,9 @@ export const api = {
   googleAuthUrl: () => http('/integrations/google/auth-url'),
   googleOauthCallback: (payload: { code: string; redirectUri?: string }) => http('/integrations/google/oauth/callback', { method: 'POST', body: JSON.stringify(payload) }),
   googleEvents: () => http('/integrations/google/events'),
+  outlookAuthUrl: () => http('/integrations/outlook/auth-url'),
+  outlookImport: () => http('/integrations/outlook/import', { method: 'POST' }),
+  trelloImport: (payload: { csvUrl?: string; items?: any[] }) => http('/integrations/trello/import', { method: 'POST', body: JSON.stringify(payload) }),
 
   // Orchestrator
   orchestrateSchedule: (payload: any) => http('/orchestrator/schedule', { method: 'POST', body: JSON.stringify(payload) }),
@@ -68,6 +71,9 @@ export const api = {
   // Gamification
   getStats: () => http('/gamification/stats'),
   getAchievements: () => http('/gamification/achievements'),
-  completeTask: (taskId: string) => http('/gamification/complete-task', { method: 'POST', body: JSON.stringify({ taskId }) })
+  completeTask: (taskId: string) => http('/gamification/complete-task', { method: 'POST', body: JSON.stringify({ taskId }) }),
+  getQuests: () => http('/gamification/quests'),
+  progressQuest: (id: string, delta = 1) => http(`/gamification/quests/${id}/progress`, { method: 'POST', body: JSON.stringify({ delta }) }),
+  refreshQuests: () => http('/gamification/quests/refresh', { method: 'POST' })
 };
 

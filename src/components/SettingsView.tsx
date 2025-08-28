@@ -23,6 +23,7 @@ import { Button } from './ui/button';
 import { Switch } from './ui/switch';
 import PremiumModal from './PremiumModal';
 import { storage, KEYS } from '../services/storage';
+import { getLocale, setLocale } from '../i18n';
 
 interface SettingsViewProps {
   onBack: () => void;
@@ -32,6 +33,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [showPremium, setShowPremium] = useState(false);
   const [user, setUser] = useState(() => storage.get<any>(KEYS.user) || { id: 'guest', name: 'Convidado' });
+  const [locale, setLoc] = useState(getLocale());
 
   const [notificationSettings, setNotificationSettings] = useState({
     pushEnabled: true,
@@ -259,6 +261,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
         <h3 className="font-medium text-[var(--app-text)] mb-2">Importar Google (stub)</h3>
         <p className="text-sm text-[var(--app-text-light)] mb-4">Simula uma importação de eventos e tarefas.</p>
         <Button onClick={() => alert('Importação Google simulada!')}>Importar agora</Button>
+      </Card>
+
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <h3 className="font-medium text-[var(--app-text)] mb-2">Idioma</h3>
+        <div className="flex items-center space-x-2">
+          <Button onClick={() => { setLocale('pt'); setLoc('pt'); }} variant={locale==='pt' ? undefined : 'outline'}>PT</Button>
+          <Button onClick={() => { setLocale('en'); setLoc('en'); }} variant={locale==='en' ? undefined : 'outline'}>EN</Button>
+        </div>
       </Card>
     </div>
   );

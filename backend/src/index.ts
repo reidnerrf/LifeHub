@@ -5,12 +5,19 @@ import mongoose, { Schema, model } from 'mongoose';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import pino from 'pino';
+import * as Sentry from '@sentry/node';
 
 dotenv.config();
 const logger = pino({ transport: { target: 'pino-pretty' } });
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Sentry (Observability)
+if (process.env.SENTRY_DSN) {
+  Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 0.1 });
+  app.use(Sentry.Handlers.requestHandler());
+}
 
 const MONGO_URL = process.env.MONGO_URL || 'mongodb://localhost:27017/lifehub';
 mongoose.connect(MONGO_URL).then(() => logger.info('Mongo connected')).catch((err) => {
@@ -118,6 +125,18 @@ const GoogleAuthSchema = new Schema({
   scope: { type: String }
 }, { timestamps: true });
 const GoogleAuth = model('GoogleAuth', GoogleAuthSchema);
+
+// Weekly Quests
+const WeeklyQuestSchema = new Schema({
+  userId: { type: String, index: true },
+  title: { type: String, required: true },
+  target: { type: Number, default: 1 },
+  progress: { type: Number, default: 0 },
+  rewardPoints: { type: Number, default: 50 },
+  weekStart: { type: Date, required: true },
+  completed: { type: Boolean, default: false }
+}, { timestamps: true });
+const WeeklyQuest = model('WeeklyQuest', WeeklyQuestSchema);
 
 // Auth
 const authMiddleware = (req: any, res: any, next: any) => {
@@ -476,6 +495,74 @@ app.post('/integrations/google/import', async (req: any, res) => {
     res.status(500).json({ error: 'import_error', details: String(e?.message || e) });
   }
 });
+
+// Outlook (stub)
+app.get('/integrations/outlook/auth-url', async (_req: any, res) => {
+  res.json({ url: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize?...' });
+});
+app.post('/integrations/outlook/import', async (_req: any, res) => {
+  res.json({ imported: 3, status: 'ok' });
+});
+
+// Trello / CSV import (stub)
+app.post('/integrations/trello/import', async (req: any, res) => {
+  const { csvUrl, items } = req.body || {};
+  const imported = items ? items.length : (csvUrl ? 10 : 0);
+  res.json({ imported, status: 'ok' });
+});
+
+// Gamification: Weekly Quests endpoints
+function getWeekStart(d = new Date()) {
+  const date = new Date(d);
+  const day = date.getDay();
+  date.setHours(0,0,0,0);
+  date.setDate(date.getDate() - day); // sunday start
+  return date;
+}
+
+app.get('/gamification/quests', async (req: any, res) => {
+  const userId = String(req.userId);
+  const weekStart = getWeekStart();
+  let quests = await WeeklyQuest.find({ userId, weekStart });
+  if (quests.length === 0) {
+    quests = await WeeklyQuest.insertMany([
+      { userId, title: 'Concluir 5 tarefas', target: 5, progress: 0, rewardPoints: 50, weekStart },
+      { userId, title: '3 sessões de foco', target: 3, progress: 0, rewardPoints: 40, weekStart },
+      { userId, title: 'Check-ins 4 dias', target: 4, progress: 0, rewardPoints: 30, weekStart },
+    ]);
+  }
+  res.json(quests);
+});
+
+app.post('/gamification/quests/:id/progress', async (req: any, res) => {
+  const userId = String(req.userId);
+  const q = await WeeklyQuest.findOne({ _id: req.params.id, userId });
+  if (!q) return res.status(404).json({ error: 'not_found' });
+  q.progress = Math.min(q.target, q.progress + (Number(req.body.delta) || 1));
+  if (q.progress >= q.target && !q.completed) {
+    q.completed = true;
+    await awardPoints(userId, q.rewardPoints, 'Quest complete');
+  }
+  await q.save();
+  res.json(q);
+});
+
+app.post('/gamification/quests/refresh', async (req: any, res) => {
+  const userId = String(req.userId);
+  const weekStart = getWeekStart();
+  await WeeklyQuest.deleteMany({ userId, weekStart });
+  const quests = await WeeklyQuest.insertMany([
+    { userId, title: 'Concluir 5 tarefas', target: 5, progress: 0, rewardPoints: 50, weekStart },
+    { userId, title: '3 sessões de foco', target: 3, progress: 0, rewardPoints: 40, weekStart },
+    { userId, title: 'Check-ins 4 dias', target: 4, progress: 0, rewardPoints: 30, weekStart },
+  ]);
+  res.json(quests);
+});
+
+// Sentry error handler
+if (process.env.SENTRY_DSN) {
+  app.use(Sentry.Handlers.errorHandler());
+}
 
 // Enhanced Orchestrator with better heuristics
 app.post('/orchestrator/schedule', async (req: any, res) => {
