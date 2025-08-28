@@ -142,6 +142,7 @@ const Dashboard: React.FC = () => {
   const visibleNotifications = smartNotifications.filter(n => !dismissedNotifications.includes(n.id));
 
   const [aiSuggestions, setAiSuggestions] = useState<{ id: string; title: string; description?: string }[]>([]);
+  const [planningScore, setPlanningScore] = useState<{ score: number; insights: string[] } | null>(null);
   useEffect(() => {
     (async () => {
       try {
@@ -149,6 +150,18 @@ const Dashboard: React.FC = () => {
         setAiSuggestions(list);
       } catch {
         setAiSuggestions(aiOrchestrator.getDailySuggestions(new Date()).map(s => ({ id: s.id, title: s.title, description: s.description })));
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const payload = { totalTasks: todayTasks.length, conflictingEvents: 0, overbookedMinutes: 0, freeBlocks: [{ start: new Date().toISOString(), end: new Date(Date.now()+60*60*1000).toISOString() }] };
+        const res = await api.scorePlanning(payload);
+        setPlanningScore(res);
+      } catch {
+        setPlanningScore({ score: 78, insights: ['Distribua melhor as tarefas','Reserve folgas para imprevistos'] });
       }
     })();
   }, []);
@@ -186,6 +199,21 @@ const Dashboard: React.FC = () => {
         <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16" />
         <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full -ml-12 -mb-12" />
       </Card>
+
+      {/* Planning Score */}
+      {planningScore && (
+        <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-semibold text-[var(--app-text)]">Score de Planejamento</h3>
+            <span className="text-[var(--app-blue)] font-bold">{planningScore.score}</span>
+          </div>
+          <ul className="list-disc ml-6 text-sm text-[var(--app-text-light)]">
+            {planningScore.insights.map((i, idx) => (
+              <li key={idx}>{i}</li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {/* Smart Notifications */}
       {visibleNotifications.length > 0 && (
