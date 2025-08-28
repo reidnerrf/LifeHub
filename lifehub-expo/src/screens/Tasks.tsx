@@ -55,6 +55,25 @@ export default function Tasks() {
         renderItem={({ item }) => (
           <View style={{ padding: 12, backgroundColor: t.card, borderRadius: 12, marginBottom: 8 }}>
             <Text style={{ color: t.text }}>{item.title}</Text>
+            <View style={{ flexDirection: 'row', marginTop: 8, gap: 8 }}>
+              <TouchableOpacity onPress={async () => {
+                try { await api.updateTask(item.id, { completed: true }); setTasks(prev => prev.filter(t => t.id !== item.id)); } catch {}
+              }} style={{ paddingVertical: 6, paddingHorizontal: 10, backgroundColor: t.primary, borderRadius: 8 }}>
+                <Text style={{ color: '#fff' }}>Concluir</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={async () => {
+                const titleNew = prompt('Editar tarefa', item.title);
+                if (!titleNew) return;
+                try { await api.updateTask(item.id, { title: titleNew }); setTasks(prev => prev.map(t => t.id === item.id ? { ...t, title: titleNew } : t)); } catch {}
+              }} style={{ paddingVertical: 6, paddingHorizontal: 10, backgroundColor: t.supportYellow, borderRadius: 8 }}>
+                <Text style={{ color: '#1C1C1E' }}>Editar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={async () => {
+                try { await api.deleteTask(item.id); setTasks(prev => prev.filter(t => t.id !== item.id)); } catch {}
+              }} style={{ paddingVertical: 6, paddingHorizontal: 10, backgroundColor: '#FA5252', borderRadius: 8 }}>
+                <Text style={{ color: '#fff' }}>Excluir</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
       />
