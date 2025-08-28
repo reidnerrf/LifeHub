@@ -9,6 +9,7 @@ import Agenda from '../screens/Agenda';
 import Focus from '../screens/Focus';
 import Notes from '../screens/Notes';
 import Finances from '../screens/Finances';
+import Habits from '../screens/Habits';
 
 const Tab = createBottomTabNavigator();
 
@@ -32,6 +33,8 @@ export default function RootNavigator() {
                      iconName = focused ? 'document-text' : 'document-text-outline';
                    } else if (route.name === 'Finances') {
                      iconName = focused ? 'wallet' : 'wallet-outline';
+                   } else if (route.name === 'Habits') {
+                     iconName = focused ? 'checkmark-circle' : 'checkmark-circle-outline';
                    }
 
                    return <Ionicons name={iconName} size={size} color={color} />;
@@ -47,6 +50,7 @@ export default function RootNavigator() {
                <Tab.Screen name="Focus" component={Focus} />
                <Tab.Screen name="Notes" component={Notes} />
                <Tab.Screen name="Finances" component={Finances} />
+               <Tab.Screen name="Habits" component={Habits} />
              </Tab.Navigator>
     </NavigationContainer>
   );
