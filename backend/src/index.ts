@@ -1,0 +1,82 @@
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import mongoose, { Schema, model } from 'mongoose';
+import pino from 'pino';
+
+dotenv.config();
+const logger = pino({ transport: { target: 'pino-pretty' } });
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const MONGO_URL = process.env.MONGO_URL || 'mongodb://localhost:27017/lifehub';
+mongoose.connect(MONGO_URL).then(() => logger.info('Mongo connected')).catch((err) => {
+  logger.error(err);
+  process.exit(1);
+});
+
+// Models
+const TaskSchema = new Schema({
+  title: { type: String, required: true },
+  completed: { type: Boolean, default: false },
+  dueDate: { type: Date },
+  priority: { type: String },
+  tags: [{ type: String }],
+}, { timestamps: true });
+const NoteSchema = new Schema({
+  title: { type: String, required: true },
+  content: { type: String, default: '' },
+  tags: [{ type: String }],
+}, { timestamps: true });
+
+const Task = model('Task', TaskSchema);
+const Note = model('Note', NoteSchema);
+
+// Routes
+app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// Tasks CRUD
+app.get('/tasks', async (_req, res) => {
+  res.json(await Task.find().sort({ createdAt: -1 }));
+});
+app.post('/tasks', async (req, res) => {
+  const t = await Task.create(req.body);
+  res.status(201).json(t);
+});
+app.patch('/tasks/:id', async (req, res) => {
+  const t = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true });
+  res.json(t);
+});
+app.delete('/tasks/:id', async (req, res) => {
+  await Task.findByIdAndDelete(req.params.id);
+  res.status(204).end();
+});
+
+// Notes CRUD
+app.get('/notes', async (_req, res) => {
+  res.json(await Note.find().sort({ createdAt: -1 }));
+});
+app.post('/notes', async (req, res) => {
+  const n = await Note.create(req.body);
+  res.status(201).json(n);
+});
+app.patch('/notes/:id', async (req, res) => {
+  const n = await Note.findByIdAndUpdate(req.params.id, req.body, { new: true });
+  res.json(n);
+});
+app.delete('/notes/:id', async (req, res) => {
+  await Note.findByIdAndDelete(req.params.id);
+  res.status(204).end();
+});
+
+// AI suggestions (stub)
+app.get('/ai/suggestions', (_req, res) => {
+  res.json([
+    { id: 's1', title: 'Você tem 30min livres', description: 'Deseja adiantar a tarefa X?' },
+    { id: 's2', title: 'Bloco de foco recomendado', description: 'Seu pico de energia é agora.' }
+  ]);
+});
+
+const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 4000;
+app.listen(port, () => logger.info(`api on ${port}`));
