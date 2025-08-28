@@ -38,10 +38,18 @@ const NoteSchema = new Schema({
   content: { type: String, default: '' },
   tags: [{ type: String }],
 }, { timestamps: true });
+const SuggestionSchema = new Schema({
+  userId: { type: String, index: true },
+  title: { type: String, required: true },
+  description: { type: String, default: '' },
+  kind: { type: String, default: 'generic' },
+  metadata: { type: Schema.Types.Mixed },
+}, { timestamps: true });
 
 const User = model('User', UserSchema);
 const Task = model('Task', TaskSchema);
 const Note = model('Note', NoteSchema);
+const Suggestion = model('Suggestion', SuggestionSchema);
 
 // Auth
 const authMiddleware = (req: any, res: any, next: any) => {
@@ -53,6 +61,10 @@ const authMiddleware = (req: any, res: any, next: any) => {
       req.userId = decoded.sub;
     }
   } catch {}
+  // fallback X-User-Id header
+  if (!req.userId && req.headers['x-user-id']) {
+    req.userId = String(req.headers['x-user-id']);
+  }
   if (!req.userId) {
     return res.status(401).json({ error: 'unauthorized' });
   }
@@ -120,6 +132,25 @@ app.patch('/notes/:id', async (req, res) => {
 });
 app.delete('/notes/:id', async (req, res) => {
   await Note.findByIdAndDelete(req.params.id);
+  res.status(204).end();
+});
+
+// Suggestions CRUD
+app.get('/suggestions', async (req: any, res) => {
+  const userId = String(req.userId);
+  res.json(await Suggestion.find({ userId }).sort({ createdAt: -1 }));
+});
+app.post('/suggestions', async (req: any, res) => {
+  const userId = String(req.userId);
+  const s = await Suggestion.create({ ...req.body, userId });
+  res.status(201).json(s);
+});
+app.patch('/suggestions/:id', async (req, res) => {
+  const s = await Suggestion.findByIdAndUpdate(req.params.id, req.body, { new: true });
+  res.json(s);
+});
+app.delete('/suggestions/:id', async (req, res) => {
+  await Suggestion.findByIdAndDelete(req.params.id);
   res.status(204).end();
 });
 

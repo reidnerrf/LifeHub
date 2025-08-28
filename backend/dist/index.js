@@ -1,0 +1,240 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = __importDefault(require("express"));
+const cors_1 = __importDefault(require("cors"));
+const dotenv_1 = __importDefault(require("dotenv"));
+const mongoose_1 = __importStar(require("mongoose"));
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const pino_1 = __importDefault(require("pino"));
+dotenv_1.default.config();
+const logger = (0, pino_1.default)({ transport: { target: 'pino-pretty' } });
+const app = (0, express_1.default)();
+app.use((0, cors_1.default)());
+app.use(express_1.default.json());
+const MONGO_URL = process.env.MONGO_URL || 'mongodb://localhost:27017/lifehub';
+mongoose_1.default.connect(MONGO_URL).then(() => logger.info('Mongo connected')).catch((err) => {
+    logger.error(err);
+    process.exit(1);
+});
+// Models
+const UserSchema = new mongoose_1.Schema({
+    email: { type: String, unique: true, index: true },
+    passwordHash: { type: String, required: true },
+    name: { type: String }
+}, { timestamps: true });
+const TaskSchema = new mongoose_1.Schema({
+    userId: { type: String, index: true },
+    title: { type: String, required: true },
+    completed: { type: Boolean, default: false },
+    dueDate: { type: Date },
+    priority: { type: String },
+    tags: [{ type: String }],
+}, { timestamps: true });
+const NoteSchema = new mongoose_1.Schema({
+    userId: { type: String, index: true },
+    title: { type: String, required: true },
+    content: { type: String, default: '' },
+    tags: [{ type: String }],
+}, { timestamps: true });
+const SuggestionSchema = new mongoose_1.Schema({
+    userId: { type: String, index: true },
+    title: { type: String, required: true },
+    description: { type: String, default: '' },
+    kind: { type: String, default: 'generic' },
+    metadata: { type: mongoose_1.Schema.Types.Mixed },
+}, { timestamps: true });
+const User = (0, mongoose_1.model)('User', UserSchema);
+const Task = (0, mongoose_1.model)('Task', TaskSchema);
+const Note = (0, mongoose_1.model)('Note', NoteSchema);
+const Suggestion = (0, mongoose_1.model)('Suggestion', SuggestionSchema);
+// Auth
+const authMiddleware = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+    try {
+        if (token) {
+            const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET || 'devsecret');
+            req.userId = decoded.sub;
+        }
+    }
+    catch { }
+    // fallback X-User-Id header
+    if (!req.userId && req.headers['x-user-id']) {
+        req.userId = String(req.headers['x-user-id']);
+    }
+    if (!req.userId) {
+        return res.status(401).json({ error: 'unauthorized' });
+    }
+    next();
+};
+app.post('/auth/register', async (req, res) => {
+    const { email, password, name } = req.body || {};
+    if (!email || !password)
+        return res.status(400).json({ error: 'email and password required' });
+    const exists = await User.findOne({ email });
+    if (exists)
+        return res.status(409).json({ error: 'email already registered' });
+    const passwordHash = await bcryptjs_1.default.hash(password, 10);
+    const user = await User.create({ email, passwordHash, name });
+    const token = jsonwebtoken_1.default.sign({}, process.env.JWT_SECRET || 'devsecret', { subject: String(user._id) });
+    res.status(201).json({ token, user: { id: user._id, email: user.email, name: user.name } });
+});
+app.post('/auth/login', async (req, res) => {
+    const { email, password } = req.body || {};
+    const user = await User.findOne({ email });
+    if (!user)
+        return res.status(401).json({ error: 'invalid credentials' });
+    const ok = await bcryptjs_1.default.compare(password, user.passwordHash);
+    if (!ok)
+        return res.status(401).json({ error: 'invalid credentials' });
+    const token = jsonwebtoken_1.default.sign({}, process.env.JWT_SECRET || 'devsecret', { subject: String(user._id) });
+    res.json({ token, user: { id: user._id, email: user.email, name: user.name } });
+});
+app.use(authMiddleware);
+// Routes
+app.get('/health', (_req, res) => res.json({ ok: true }));
+// Tasks CRUD
+app.get('/tasks', async (req, res) => {
+    const userId = String(req.userId);
+    res.json(await Task.find({ userId }).sort({ createdAt: -1 }));
+});
+app.post('/tasks', async (req, res) => {
+    const userId = String(req.userId);
+    const t = await Task.create({ ...req.body, userId });
+    res.status(201).json(t);
+});
+app.patch('/tasks/:id', async (req, res) => {
+    const t = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(t);
+});
+app.delete('/tasks/:id', async (req, res) => {
+    await Task.findByIdAndDelete(req.params.id);
+    res.status(204).end();
+});
+// Notes CRUD
+app.get('/notes', async (req, res) => {
+    const userId = String(req.userId);
+    res.json(await Note.find({ userId }).sort({ createdAt: -1 }));
+});
+app.post('/notes', async (req, res) => {
+    const userId = String(req.userId);
+    const n = await Note.create({ ...req.body, userId });
+    res.status(201).json(n);
+});
+app.patch('/notes/:id', async (req, res) => {
+    const n = await Note.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(n);
+});
+app.delete('/notes/:id', async (req, res) => {
+    await Note.findByIdAndDelete(req.params.id);
+    res.status(204).end();
+});
+// Suggestions CRUD
+app.get('/suggestions', async (req, res) => {
+    const userId = String(req.userId);
+    res.json(await Suggestion.find({ userId }).sort({ createdAt: -1 }));
+});
+app.post('/suggestions', async (req, res) => {
+    const userId = String(req.userId);
+    const s = await Suggestion.create({ ...req.body, userId });
+    res.status(201).json(s);
+});
+app.patch('/suggestions/:id', async (req, res) => {
+    const s = await Suggestion.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(s);
+});
+app.delete('/suggestions/:id', async (req, res) => {
+    await Suggestion.findByIdAndDelete(req.params.id);
+    res.status(204).end();
+});
+// AI suggestions (stub)
+app.get('/ai/suggestions', (_req, res) => {
+    res.json([
+        { id: 's1', title: 'Você tem 30min livres', description: 'Deseja adiantar a tarefa X?' },
+        { id: 's2', title: 'Bloco de foco recomendado', description: 'Seu pico de energia é agora.' }
+    ]);
+});
+// AI planning score
+app.post('/ai/score-planning', (req, res) => {
+    const { totalTasks = 0, conflictingEvents = 0, overbookedMinutes = 0, freeBlocks = [] } = req.body || {};
+    const insights = [];
+    let score = 100;
+    if (conflictingEvents > 0) {
+        score -= Math.min(30, conflictingEvents * 10);
+        insights.push('Há conflitos na agenda. Considere mover eventos.');
+    }
+    if (overbookedMinutes > 30) {
+        score -= Math.min(40, Math.floor(overbookedMinutes / 15) * 5);
+        insights.push('Dia superlotado. Adicione folgas.');
+    }
+    if (!freeBlocks || freeBlocks.length === 0) {
+        score -= 20;
+        insights.push('Sem blocos livres planejados.');
+    }
+    if (totalTasks > 12) {
+        score -= 10;
+        insights.push('Muitas tarefas no dia. Priorize as críticas.');
+    }
+    score = Math.max(0, Math.min(100, score));
+    res.json({ score, insights });
+});
+// AI reschedule (very simple heuristic)
+app.post('/ai/reschedule', (req, res) => {
+    const { tasks = [], freeBlocks = [] } = req.body || {};
+    const suggestions = [];
+    for (const task of tasks) {
+        const block = freeBlocks[0];
+        if (!block)
+            break;
+        const start = new Date(block.start || new Date());
+        const dur = (task.durationMin || 30) * 60000;
+        const end = new Date(start.getTime() + dur);
+        suggestions.push({ taskId: String(task.id), suggestedStart: start.toISOString(), suggestedEnd: end.toISOString(), reason: 'Primeiro bloco livre disponível' });
+    }
+    res.json({ suggestions });
+});
+// Google Calendar import stub
+app.post('/integrations/google/import', async (req, res) => {
+    // Stub: pretend we imported 3 events
+    res.json({ imported: 3, status: 'ok' });
+});
+const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 4000;
+app.listen(port, () => logger.info(`api on ${port}`));
+//# sourceMappingURL=index.js.map

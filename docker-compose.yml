@@ -1,0 +1,22 @@
+version: "3.9"
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+  backend:
+    build:
+      context: ./backend
+    environment:
+      - MONGO_URL=mongodb://mongo:27017/lifehub
+      - JWT_SECRET=devsecret
+    depends_on:
+      - mongo
+    ports:
+      - "4000:4000"
+volumes:
+  mongo_data:
+
