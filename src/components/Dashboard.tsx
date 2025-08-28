@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { 
   Calendar, 
   CheckSquare, 
@@ -29,6 +29,7 @@ import { Button } from './ui/button';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import PremiumModal from './PremiumModal';
 import { aiOrchestrator } from '../services/aiOrchestrator';
+import { api } from '../services/api';
 
 const Dashboard: React.FC = () => {
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
@@ -140,7 +141,17 @@ const Dashboard: React.FC = () => {
 
   const visibleNotifications = smartNotifications.filter(n => !dismissedNotifications.includes(n.id));
 
-  const aiSuggestions = useMemo(() => aiOrchestrator.getDailySuggestions(new Date()), []);
+  const [aiSuggestions, setAiSuggestions] = useState<{ id: string; title: string; description?: string }[]>([]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = await api.listSuggestions();
+        setAiSuggestions(list);
+      } catch {
+        setAiSuggestions(aiOrchestrator.getDailySuggestions(new Date()).map(s => ({ id: s.id, title: s.title, description: s.description })));
+      }
+    })();
+  }, []);
 
   return (
     <div className="flex flex-col space-y-6 pb-6">

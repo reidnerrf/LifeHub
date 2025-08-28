@@ -4,6 +4,7 @@ import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { EmptyState } from './ui/empty-state';
+import { api } from '../services/api';
 
 const NotesView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,6 +72,17 @@ const NotesView: React.FC = () => {
       color: 'var(--app-blue)',
     },
   ]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = await api.listNotes();
+        setNotes(list.map(n => ({ id: n._id, title: n.title, content: n.content, type: 'text', tags: n.tags || [], favorite: false, date: new Date().toISOString(), color: 'var(--app-blue)' })));
+      } catch {
+        // keep demo data
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     try {

@@ -3,6 +3,7 @@ import { Plus, MoreVertical, Clock, Flag } from 'lucide-react';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { storage } from '../services/storage';
+import { api } from '../services/api';
 import { SegmentedControl } from './ui/segmented-control';
 import { Tag } from './ui/tag';
 import { EmptyState } from './ui/empty-state';
@@ -52,8 +53,20 @@ const TasksView: React.FC = () => {
   });
 
   useEffect(() => {
-    const saved = storage.get<typeof tasks>('tasks');
-    if (saved) setTasks(saved);
+    (async () => {
+      try {
+        const list = await api.listTasks();
+        const mapped = {
+          todo: list.filter(t => !t.completed).map(t => ({ id: t._id, title: t.title, description: '', priority: 'medium', dueDate: '', tags: [] })),
+          inProgress: [],
+          done: list.filter(t => t.completed).map(t => ({ id: t._id, title: t.title, description: '', priority: 'low', dueDate: '', tags: [] })),
+        } as any;
+        setTasks(mapped);
+      } catch {
+        const saved = storage.get<typeof tasks>('tasks');
+        if (saved) setTasks(saved);
+      }
+    })();
   }, []);
 
   useEffect(() => {
