@@ -12,6 +12,7 @@ import Finances from '../screens/Finances';
 import Habits from '../screens/Habits';
 import Assistant from '../screens/Assistant';
 import Gamification from '../screens/Gamification';
+import Settings from '../screens/Settings';
 
 const Tab = createBottomTabNavigator();
 
@@ -41,6 +42,8 @@ export default function RootNavigator() {
                      iconName = focused ? 'sparkles' : 'sparkles-outline';
                    } else if (route.name === 'Gamification') {
                      iconName = focused ? 'trophy' : 'trophy-outline';
+                   } else if (route.name === 'Settings') {
+                     iconName = focused ? 'settings' : 'settings-outline';
                    }
 
                    return <Ionicons name={iconName} size={size} color={color} />;
@@ -59,6 +62,7 @@ export default function RootNavigator() {
                <Tab.Screen name="Habits" component={Habits} />
                <Tab.Screen name="Assistant" component={Assistant} />
                <Tab.Screen name="Gamification" component={Gamification} />
+               <Tab.Screen name="Settings" component={Settings} />
              </Tab.Navigator>
     </NavigationContainer>
   );
