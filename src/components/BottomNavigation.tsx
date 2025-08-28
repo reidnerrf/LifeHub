@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Home, CheckSquare, Calendar, Target, MoreHorizontal, Brain, DollarSign, FileText, Bot, X, Sparkles, Route } from 'lucide-react';
+import { Home, CheckSquare, Calendar, Target, MoreHorizontal, Brain, DollarSign, FileText, Bot, X, Sparkles } from 'lucide-react';
 
 interface BottomNavigationProps {
   activeTab: string;
@@ -22,7 +22,6 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeTab, onTabCha
     { id: 'finances', icon: DollarSign, label: 'Finanças', color: 'var(--app-yellow)', description: 'Controle de gastos' },
     { id: 'notes', icon: FileText, label: 'Notas', color: 'var(--app-purple)', description: 'Anotações e ideias' },
     { id: 'assistant', icon: Bot, label: 'Assistente IA', color: 'var(--app-green)', description: 'Sugestões inteligentes' },
-    { id: 'roadmaps', icon: Route, label: 'Roadmaps', color: 'var(--app-purple)', description: 'Planejamento de metas' },
   ];
 
   const handleTabClick = (tabId: string) => {
