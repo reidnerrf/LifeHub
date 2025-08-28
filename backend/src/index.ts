@@ -34,10 +34,20 @@ const UserSchema = new Schema({
 const TaskSchema = new Schema({
   userId: { type: String, index: true },
   title: { type: String, required: true },
-  completed: { type: Boolean, default: false },
-  dueDate: { type: Date },
-  priority: { type: String },
+  description: { type: String, default: '' },
+  status: { type: String, enum: ['pending', 'in_progress', 'completed', 'cancelled'], default: 'pending' },
+  priority: { type: String, enum: ['low', 'medium', 'high', 'urgent'], default: 'medium' },
   tags: [{ type: String }],
+  subtasks: [{
+    title: { type: String, required: true },
+    completed: { type: Boolean, default: false },
+    createdAt: { type: Date, default: Date.now }
+  }],
+  dueDate: { type: Date },
+  estimatedDuration: { type: Number }, // em minutos
+  actualDuration: { type: Number }, // em minutos
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 const NoteSchema = new Schema({
   userId: { type: String, index: true },
