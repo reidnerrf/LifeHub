@@ -30,6 +30,7 @@ import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Cartesia
 import PremiumModal from './PremiumModal';
 import { aiOrchestrator } from '../services/aiOrchestrator';
 import { api } from '../services/api';
+import { storage, KEYS } from '../services/storage';
 
 const Dashboard: React.FC = () => {
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);

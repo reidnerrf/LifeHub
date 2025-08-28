@@ -355,23 +355,23 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
                 )}
                 
                 <div className="flex space-x-2 ml-auto">
+                  {integration.id === 'outlook' && (
+                    <Button size="sm" className="text-xs h-7 px-3 bg-[var(--app-blue)]" onClick={async () => {
+                      try { const res = await api.outlookAuthUrl(); window.open(res.url, '_blank'); } catch {}
+                    }}>Conectar Outlook</Button>
+                  )}
+                  {integration.id === 'trello' && (
+                    <Button size="sm" className="text-xs h-7 px-3 bg-[var(--app-blue)]" onClick={async () => {
+                      try { const res = await api.trelloImport({ csvUrl: 'https://example.com/board.csv' }); alert(`Importados: ${res.imported}`); } catch { alert('Falha import Trello'); }
+                    }}>Importar Trello CSV</Button>
+                  )}
                   {integration.connected ? (
                     <>
-                      <Button size="sm" variant="outline" className="text-xs h-7 px-3">
-                        Configurar
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="ghost" 
-                        className="text-xs h-7 px-3 text-[var(--app-red)]"
-                      >
-                        Desconectar
-                      </Button>
+                      <Button size="sm" variant="outline" className="text-xs h-7 px-3">Configurar</Button>
+                      <Button size="sm" variant="ghost" className="text-xs h-7 px-3 text-[var(--app-red)]">Desconectar</Button>
                     </>
                   ) : (
-                    <Button size="sm" className="text-xs h-7 px-3 bg-[var(--app-blue)]">
-                      Conectar
-                    </Button>
+                    <Button size="sm" className="text-xs h-7 px-3 bg-[var(--app-blue)]">Conectar</Button>
                   )}
                 </div>
               </div>
