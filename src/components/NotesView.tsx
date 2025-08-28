@@ -250,9 +250,28 @@ const NotesView: React.FC = () => {
                 {note.favorite && (
                   <Star size={16} className="text-[var(--app-yellow)] fill-current" />
                 )}
-                <button className="text-[var(--app-gray)] hover:text-[var(--app-text)] transition-colors">
-                  <MoreVertical size={16} />
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    className="text-xs px-2 py-1 rounded-lg bg-[var(--app-light-gray)]"
+                    onClick={async () => {
+                      const title = prompt('Editar título', note.title);
+                      if (!title) return;
+                      try { await api.updateNote(String(note.id), { title }); } catch {}
+                      setNotes(prev => prev.map(n => n.id === note.id ? { ...n, title } : n));
+                    }}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    className="text-xs px-2 py-1 rounded-lg bg-[var(--app-red)] text-white"
+                    onClick={async () => {
+                      try { await api.deleteNote(String(note.id)); } catch {}
+                      setNotes(prev => prev.filter(n => n.id !== note.id));
+                    }}
+                  >
+                    Excluir
+                  </button>
+                </div>
               </div>
             </div>
 

@@ -103,13 +103,61 @@ const TasksView: React.FC = () => {
     }
   };
 
+  const toggleComplete = async (task: any) => {
+    try {
+      const id = String(task.id);
+      const updated = await api.updateTask(id, { completed: !task.completed });
+      setTasks(prev => ({
+        ...prev,
+        todo: prev.todo.filter(t => String(t.id) !== id),
+        inProgress: prev.inProgress.filter(t => String(t.id) !== id),
+        done: prev.done.filter(t => String(t.id) !== id),
+      }));
+      if (updated && updated._id) {
+        const mapped = { id: updated._id, title: updated.title, description: '', priority: 'medium', dueDate: '', tags: [], completed: updated.completed };
+        setTasks(prev => ({
+          ...prev,
+          ...(updated.completed ? { done: [mapped, ...prev.done] } : { todo: [mapped, ...prev.todo] })
+        }));
+      }
+    } catch {}
+  };
+
+  const deleteTask = async (task: any) => {
+    const id = String(task.id);
+    try { await api.deleteTask(id); } catch {}
+    setTasks(prev => ({
+      ...prev,
+      todo: prev.todo.filter(t => String(t.id) !== id),
+      inProgress: prev.inProgress.filter(t => String(t.id) !== id),
+      done: prev.done.filter(t => String(t.id) !== id),
+    }));
+  };
+
+  const editTask = async (task: any) => {
+    const title = prompt('Editar título', task.title);
+    if (!title) return;
+    const id = String(task.id);
+    try { await api.updateTask(id, { title }); } catch {}
+    setTasks(prev => ({
+      ...prev,
+      todo: prev.todo.map(t => String(t.id) === id ? { ...t, title } : t),
+      inProgress: prev.inProgress.map(t => String(t.id) === id ? { ...t, title } : t),
+      done: prev.done.map(t => String(t.id) === id ? { ...t, title } : t),
+    }));
+  };
+
   const TaskCard = ({ task }: { task: any }) => (
     <Card className="p-4 bg-white rounded-xl border-0 shadow-sm mb-3">
       <div className="flex items-start justify-between mb-2">
         <h4 className="text-sm font-medium text-gray-900 line-clamp-2">{task.title}</h4>
-        <button className="text-[var(--app-gray)] p-1">
-          <MoreVertical size={16} />
-        </button>
+        <div className="flex items-center space-x-2">
+          <button className="text-xs px-2 py-1 rounded-lg bg-[var(--app-light-gray)]" onClick={() => toggleComplete(task)}>
+            {task.completed ? 'Reabrir' : 'Concluir'}
+          </button>
+          <button className="text-xs px-2 py-1 rounded-lg bg-[var(--app-light-gray)]" onClick={() => editTask(task)}>Editar</button>
+          <button className="text-xs px-2 py-1 rounded-lg bg-[var(--app-red)] text-white" onClick={() => deleteTask(task)}>Excluir</button>
+        </div>
       </div>
       
       {task.description && (
