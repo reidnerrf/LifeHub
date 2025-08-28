@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DollarSign, TrendingUp, TrendingDown, Plus, CreditCard, Receipt, Target, AlertCircle } from 'lucide-react';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
+import { storage, KEYS } from '../services/storage';
 
 const FinancesView: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('month');
@@ -15,7 +16,7 @@ const FinancesView: React.FC = () => {
     savingsGoal: 2000.00,
   };
 
-  const transactions = [
+  const [transactions, setTransactions] = useState(() => storage.get<any[]>(KEYS.transactions) || [
     {
       id: 1,
       title: 'Salário',
@@ -66,9 +67,9 @@ const FinancesView: React.FC = () => {
       icon: '📺',
       color: 'var(--app-red)',
     },
-  ];
+  ]);
 
-  const bills = [
+  const [bills, setBills] = useState(() => storage.get<any[]>(KEYS.bills) || [
     {
       id: 1,
       name: 'Aluguel',
@@ -105,7 +106,43 @@ const FinancesView: React.FC = () => {
       icon: '💳',
       category: 'Cartão',
     },
-  ];
+  ]);
+
+  const [receivables, setReceivables] = useState(() => storage.get<any[]>(KEYS.receivables) || [
+    { id: 1, name: 'Cliente ACME', amount: 1200.00, dueDate: '2025-09-02', status: 'pending', icon: '💼', category: 'Serviços' },
+  ]);
+
+  useEffect(() => { storage.set(KEYS.transactions, transactions); }, [transactions]);
+  useEffect(() => { storage.set(KEYS.bills, bills); }, [bills]);
+  useEffect(() => { storage.set(KEYS.receivables, receivables); }, [receivables]);
+
+  const addBill = () => {
+    const name = prompt('Descrição da conta');
+    const amount = parseFloat(prompt('Valor') || '0');
+    const dueDate = prompt('Vencimento (YYYY-MM-DD)') || new Date().toISOString().slice(0,10);
+    if (!name || isNaN(amount)) return;
+    setBills(prev => [{ id: Date.now(), name, amount, dueDate, status: 'pending', icon: '🧾', category: 'Outros' }, ...prev]);
+  };
+
+  const addReceivable = () => {
+    const name = prompt('Descrição do recebível');
+    const amount = parseFloat(prompt('Valor') || '0');
+    const dueDate = prompt('Vencimento (YYYY-MM-DD)') || new Date().toISOString().slice(0,10);
+    if (!name || isNaN(amount)) return;
+    setReceivables(prev => [{ id: Date.now(), name, amount, dueDate, status: 'pending', icon: '💼', category: 'Outros' }, ...prev]);
+  };
+
+  const markBill = (id: number, status: string) => {
+    setBills(prev => prev.map(b => b.id === id ? { ...b, status } : b));
+  };
+
+  const monthlySummary = useMemo(() => {
+    const incomes = transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const expenses = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0);
+    const payables = bills.filter(b => b.status !== 'paid').reduce((s, b) => s + b.amount, 0);
+    const receivs = receivables.filter(r => r.status !== 'received').reduce((s, r) => s + r.amount, 0);
+    return { incomes, expenses, payables, receivs, balance: incomes - expenses };
+  }, [transactions, bills, receivables]);
 
   const categories = [
     { name: 'Alimentação', spent: 420.50, budget: 600, color: 'var(--app-red)', icon: '🍽️' },
@@ -233,6 +270,7 @@ const FinancesView: React.FC = () => {
         </div>
         
         <div className="space-y-3">
+          <button onClick={addBill} className="px-3 py-1 rounded-lg bg-[var(--app-blue)] text-white text-sm">Adicionar conta</button>
           {bills.map((bill) => (
             <div key={bill.id} className="flex items-center space-x-4 p-3 rounded-xl bg-[var(--app-light-gray)]">
               <div className="text-2xl">{bill.icon}</div>
@@ -246,19 +284,60 @@ const FinancesView: React.FC = () => {
                 <p className="font-semibold text-[var(--app-text)]">
                   R$ {bill.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </p>
-                <Badge 
-                  className="text-xs mt-1"
-                  style={{ 
-                    backgroundColor: `${getBillStatusColor(bill.status)}15`,
-                    color: getBillStatusColor(bill.status)
-                  }}
-                >
-                  {getBillStatusText(bill.status)}
-                </Badge>
+                <div className="flex items-center space-x-2 justify-end mt-1">
+                  <Badge 
+                    className="text-xs"
+                    style={{ backgroundColor: `${getBillStatusColor(bill.status)}15`, color: getBillStatusColor(bill.status) }}
+                  >
+                    {getBillStatusText(bill.status)}
+                  </Badge>
+                  <button onClick={() => markBill(bill.id, 'paid')} className="px-2 py-1 text-xs rounded bg-[var(--app-green)] text-white">Marcar pago</button>
+                </div>
               </div>
             </div>
           ))}
         </div>
+      </Card>
+
+      {/* Recebimentos */}
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-medium text-[var(--app-text)]">A Receber</h3>
+          <Badge variant="secondary" className="bg-[var(--app-blue)]15 text-[var(--app-blue)]">
+            {receivables.filter(r => r.status !== 'received').length} pendentes
+          </Badge>
+        </div>
+        <div className="space-y-3">
+          <button onClick={addReceivable} className="px-3 py-1 rounded-lg bg-[var(--app-blue)] text-white text-sm">Adicionar recebível</button>
+          {receivables.map((r) => (
+            <div key={r.id} className="flex items-center space-x-4 p-3 rounded-xl bg-[var(--app-light-gray)]">
+              <div className="text-2xl">{r.icon}</div>
+              <div className="flex-1">
+                <h4 className="font-medium text-[var(--app-text)]">{r.name}</h4>
+                <p className="text-sm text-[var(--app-text-light)]">Vence em {new Date(r.dueDate).toLocaleDateString('pt-BR')}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-semibold text-[var(--app-text)]">R$ {r.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                <div className="flex items-center space-x-2 justify-end mt-1">
+                  <Badge className="text-xs" style={{ backgroundColor: 'var(--app-blue)15', color: 'var(--app-blue)' }}>Pendente</Badge>
+                  <button onClick={() => setReceivables(prev => prev.map(x => x.id === r.id ? { ...x, status: 'received' } : x))} className="px-2 py-1 text-xs rounded bg-[var(--app-green)] text-white">Marcar recebido</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Resumo mensal */}
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <h3 className="font-medium text-[var(--app-text)] mb-2">Resumo do Mês</h3>
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="p-3 rounded bg-[var(--app-green)]15 text-[var(--app-green)]">Entradas: R$ {monthlySummary.incomes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+          <div className="p-3 rounded bg-[var(--app-red)]15 text-[var(--app-red)]">Saídas: R$ {monthlySummary.expenses.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+          <div className="p-3 rounded bg-[var(--app-yellow)]15 text-[var(--app-yellow)]">A pagar: R$ {monthlySummary.payables.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+          <div className="p-3 rounded bg-[var(--app-blue)]15 text-[var(--app-blue)]">A receber: R$ {monthlySummary.receivs.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+        </div>
+        <div className="mt-3 text-sm text-[var(--app-text)]">Saldo: R$ {monthlySummary.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
       </Card>
 
       {/* Categories Budget */}

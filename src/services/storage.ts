@@ -30,6 +30,12 @@ export const KEYS = {
   user: 'userStub',
   notes: 'notes',
   tasks: 'tasks',
-  pomoSessions: 'pomodoroSessions'
+  pomoSessions: 'pomodoroSessions',
+  calendarEvents: 'calendarEvents',
+  googleConnected: 'googleConnected',
+  habits: 'habits',
+  bills: 'bills',
+  receivables: 'receivables',
+  transactions: 'transactions'
 } as const;
 
