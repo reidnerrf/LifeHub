@@ -44,6 +44,9 @@ const Dashboard: React.FC = () => {
   const [achievements, setAchievements] = useState<any[]>([]);
   const [weeklyQuests, setWeeklyQuests] = useState<any[]>([]);
   const premiumActive = isPremiumActive();
+  const [showIdealWeek, setShowIdealWeek] = useState(false);
+  const [idealWeek, setIdealWeek] = useState<any>(null);
+  const [inboxText, setInboxText] = useState('');
 
   const showToast = (message: string, type: 'success' | 'info' | 'error' = 'info') => {
     const id = Math.random().toString(36).slice(2);
@@ -721,6 +724,14 @@ const Dashboard: React.FC = () => {
             <Coffee size={20} style={{ color: 'var(--app-purple)' }} />
             <span className="text-sm font-medium text-[var(--app-text)] group-hover:text-[var(--app-purple)] transition-colors">Pausa</span>
           </button>
+          <button
+            onClick={async () => {
+              try { const res = await api.idealWeek({}); setIdealWeek(res); setShowIdealWeek(true); } catch { showToast('Erro ao gerar Semana Ideal', 'error'); }
+            }}
+            className="flex items-center space-x-3 p-4 bg-[var(--app-blue)]15 rounded-xl hover:bg-[var(--app-blue)]20 transition-all group">
+            <Calendar size={20} style={{ color: 'var(--app-blue)' }} />
+            <span className="text-sm font-medium text-[var(--app-text)] group-hover:text-[var(--app-blue)] transition-colors">Semana Ideal</span>
+          </button>
         </div>
       </Card>
       <PremiumModal open={showPremium} onClose={() => setShowPremium(false)} />
@@ -729,12 +740,33 @@ const Dashboard: React.FC = () => {
       <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
         <h3 className="font-medium text-[var(--app-text)] mb-3">Inbox</h3>
         <div className="flex items-center space-x-2">
-          <input placeholder="Capture algo rápido..." className="flex-1 p-3 rounded-xl bg-[var(--app-light-gray)] border-0" />
-          <button className="px-3 py-2 rounded-xl bg-[var(--app-blue)] text-white text-sm">Adicionar</button>
+          <input value={inboxText} onChange={e => setInboxText(e.target.value)} placeholder="Capture algo rápido..." className="flex-1 p-3 rounded-xl bg-[var(--app-light-gray)] border-0" />
+          <button onClick={async () => { const title = inboxText.trim(); if (!title) return; try { await api.createTask({ title, completed: false }); showToast('Adicionado às tarefas', 'success'); setInboxText(''); } catch { showToast('Falha ao adicionar', 'error'); } }} className="px-3 py-2 rounded-xl bg-[var(--app-blue)] text-white text-sm">Adicionar</button>
           <button className="px-3 py-2 rounded-xl bg-[var(--app-light-gray)] text-sm">Voz</button>
           <button className="px-3 py-2 rounded-xl bg-[var(--app-light-gray)] text-sm">WhatsApp</button>
         </div>
       </Card>
+
+      {showIdealWeek && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowIdealWeek(false)}>
+          <div className="w-full max-w-md m-4 p-6 rounded-2xl bg-[var(--app-card)] border border-[var(--app-light-gray)]" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-[var(--app-text)]">Semana Ideal</h3>
+              <button onClick={() => setShowIdealWeek(false)} className="p-2 rounded-lg hover:bg-[var(--app-light-gray)]">✕</button>
+            </div>
+            <div className="space-y-3 max-h-80 overflow-auto">
+              {(idealWeek?.blocks || []).map((b: any, i: number) => (
+                <div key={i} className="p-3 rounded-xl bg-[var(--app-light-gray)]">
+                  <div className="text-sm text-[var(--app-text)]">{b.day} • {b.type}</div>
+                  <div className="text-xs text-[var(--app-text-light)]">{b.start} - {b.end}</div>
+                </div>
+              ))}
+              {idealWeek?.guidance && <div className="text-sm text-[var(--app-text)]">{idealWeek.guidance}</div>}
+            </div>
+            <button onClick={() => { showToast('Semana Ideal aplicada!', 'success'); setShowIdealWeek(false); }} className="mt-4 w-full py-2 bg-[var(--app-blue)] text-white rounded-lg text-sm">Aplicar</button>
+          </div>
+        </div>
+      )}
 
       {/* Reschedule Modal */}
       {showReschedule && (
