@@ -36,6 +36,17 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
   const [user, setUser] = useState(() => storage.get<any>(KEYS.user) || { id: 'guest', name: 'Convidado' });
   const [locale, setLoc] = useState(getLocale());
   const [subscription, setSubscription] = useState<any>(() => storage.get(KEYS.subscription));
+  const trialInfo = (() => {
+    if (!subscription || subscription.plan !== 'trial') return null;
+    const started = new Date(subscription.startedAt || Date.now());
+    const duration = Number(subscription.durationDays || 7);
+    const end = new Date(started.getTime() + duration * 24 * 60 * 60 * 1000);
+    const now = new Date();
+    const msLeft = end.getTime() - now.getTime();
+    const daysLeft = Math.max(0, Math.ceil(msLeft / (24 * 60 * 60 * 1000)));
+    const expired = msLeft <= 0;
+    return { daysLeft, expired, end };
+  })();
 
   const [notificationSettings, setNotificationSettings] = useState({
     pushEnabled: true,
@@ -276,11 +287,29 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
       <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
         <h3 className="font-medium text-[var(--app-text)] mb-2">Assinatura</h3>
         {subscription ? (
-          <div className="text-sm text-[var(--app-text-light)]">Plano ativo: {subscription.plan}</div>
+          <div className="space-y-2 text-sm">
+            <div className="text-[var(--app-text-light)]">Plano: {subscription.plan}</div>
+            {trialInfo && (
+              <div>
+                {trialInfo.expired ? (
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--app-yellow)]10">
+                    <span className="text-[var(--app-text)]">Seu teste expirou.</span>
+                    <Button size="sm" onClick={() => setShowPremium(true)}>Fazer upgrade</Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--app-blue)]10">
+                    <span className="text-[var(--app-text)]">Teste ativo: {trialInfo.daysLeft} dias restantes</span>
+                    <Button size="sm" onClick={() => setShowPremium(true)}>Upgrade</Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         ) : (
           <div className="flex items-center space-x-2">
             <Button onClick={() => setShowPremium(true)}>Ver planos</Button>
-            <Button variant="outline" onClick={() => { storage.set(KEYS.subscription, { plan: 'trial', startedAt: new Date().toISOString() }); setSubscription({ plan: 'trial' }); }}>Iniciar teste (7 dias)</Button>
+            <Button variant="outline" onClick={() => { const sub = { plan: 'trial', startedAt: new Date().toISOString(), durationDays: 7 }; storage.set(KEYS.subscription, sub); setSubscription(sub); }}>Teste 7 dias</Button>
+            <Button variant="outline" onClick={() => { const sub = { plan: 'trial', startedAt: new Date().toISOString(), durationDays: 14 }; storage.set(KEYS.subscription, sub); setSubscription(sub); }}>Teste 14 dias</Button>
           </div>
         )}
       </Card>

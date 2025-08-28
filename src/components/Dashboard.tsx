@@ -256,6 +256,17 @@ const Dashboard: React.FC = () => {
         <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full -ml-12 -mb-12" />
       </Card>
 
+      {/* Integrations Shortcuts */}
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <h3 className="font-medium text-[var(--app-text)] mb-4">Integrações</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={async () => { try { const res = await api.googleAuthUrl(); window.open(res.url, '_blank'); } catch {} }} className="p-3 rounded-xl bg-[var(--app-light-gray)]">Google Calendar</button>
+          <button onClick={async () => { try { const res = await api.outlookAuthUrl(); window.open(res.url, '_blank'); } catch {} }} className="p-3 rounded-xl bg-[var(--app-light-gray)]">Outlook</button>
+          <button onClick={async () => { try { const res = await api.trelloImport({ csvUrl: 'https://example.com/board.csv' }); showToast(`Trello importados: ${res.imported}`, 'success'); } catch { showToast('Falha Trello', 'error'); } }} className="p-3 rounded-xl bg-[var(--app-light-gray)]">Trello CSV</button>
+          <button onClick={async () => { try { const res = await api.importGoogle(); showToast(`Google eventos importados: ${res.imported}`, 'success'); } catch { showToast('Falha Google', 'error'); } }} className="p-3 rounded-xl bg-[var(--app-light-gray)]">Importar Google</button>
+        </div>
+      </Card>
+
       {/* Auto-rescheduler */}
       <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
         <div className="flex items-center justify-between mb-3">
