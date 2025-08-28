@@ -21,6 +21,7 @@ const FinancesView = lazy(() => import('./components/FinancesView'));
 const NotesView = lazy(() => import('./components/NotesView'));
 const AssistantView = lazy(() => import('./components/AssistantView'));
 const ProfileView = lazy(() => import('./components/ProfileView'));
+const RoadmapsView = lazy(() => import('./components/RoadmapsView'));
 
 type AppState = 'splash' | 'onboarding' | 'login' | 'app';
 
@@ -337,6 +338,12 @@ export default function App() {
         return (
           <Suspense fallback={<LoadingFallback />}>
             <NotesView {...viewProps} />
+          </Suspense>
+        );
+      case 'roadmaps':
+        return (
+          <Suspense fallback={<LoadingFallback />}>
+            <RoadmapsView {...viewProps} />
           </Suspense>
         );
       case 'assistant':
