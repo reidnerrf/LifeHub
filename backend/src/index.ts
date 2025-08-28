@@ -44,7 +44,7 @@ const Task = model('Task', TaskSchema);
 const Note = model('Note', NoteSchema);
 
 // Auth
-const authMiddleware = (req: any, _res: any, next: any) => {
+const authMiddleware = (req: any, res: any, next: any) => {
   const authHeader = req.headers.authorization as string | undefined;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
   try {
@@ -54,10 +54,8 @@ const authMiddleware = (req: any, _res: any, next: any) => {
     }
   } catch {}
   if (!req.userId) {
-    const fallback = req.header('x-user-id');
-    if (fallback) req.userId = fallback;
+    return res.status(401).json({ error: 'unauthorized' });
   }
-  if (!req.userId) req.userId = 'public';
   next();
 };
 
