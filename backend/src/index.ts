@@ -124,5 +124,11 @@ app.post('/ai/reschedule', (req, res) => {
   res.json({ suggestions });
 });
 
+// Google Calendar import stub
+app.post('/integrations/google/import', async (req, res) => {
+  // Stub: pretend we imported 3 events
+  res.json({ imported: 3, status: 'ok' });
+});
+
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 4000;
 app.listen(port, () => logger.info(`api on ${port}`));

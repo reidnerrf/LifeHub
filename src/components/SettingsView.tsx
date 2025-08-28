@@ -449,7 +449,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
       <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
         <h3 className="font-medium text-[var(--app-text)] mb-2">Usuário atual</h3>
         <div className="flex items-center space-x-2">
-          <input id="user-id-input" placeholder="public" className="flex-1 p-3 rounded-xl bg-[var(--app-light-gray)] border-0" />
+          <input id="user-id-input" defaultValue={localStorage.getItem('userId') || ''} placeholder="public" className="flex-1 p-3 rounded-xl bg-[var(--app-light-gray)] border-0" />
           <Button onClick={() => {
             const el = document.getElementById('user-id-input') as HTMLInputElement | null;
             const val = el?.value?.trim() || 'public';
@@ -458,6 +458,20 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
             alert('Usuário definido: ' + val);
           }}>Salvar</Button>
         </div>
+      </Card>
+
+      {/* Google Calendar Import (stub) */}
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <h3 className="font-medium text-[var(--app-text)] mb-2">Integração Google Calendar</h3>
+        <Button onClick={async () => {
+          try {
+            const mod = await import('../services/api');
+            const res = await (mod as any).api.importGoogle();
+            alert(`Importados: ${res.imported}`);
+          } catch {
+            alert('Falha ao importar (stub).');
+          }
+        }}>Importar eventos (stub)</Button>
       </Card>
 
       <PremiumModal open={showPremium} onClose={() => setShowPremium(false)} />
