@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   ArrowLeft, 
   Bell, 
@@ -59,6 +59,17 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
     weeklyReports: true,
     achievementAlerts: true,
   });
+
+  // Accessibility & Privacy
+  const [highContrast, setHighContrast] = useState<boolean>(() => !!storage.get(KEYS.accessibilityHighContrast));
+  const [fontScale, setFontScale] = useState<number>(() => storage.get<number>(KEYS.accessibilityFontScale) || 1);
+  const [localAI, setLocalAI] = useState<boolean>(() => !!storage.get(KEYS.privacyLocalAI));
+  const [dataShare, setDataShare] = useState<boolean>(() => storage.get(KEYS.privacyDataShare) !== false);
+
+  // Modes
+  const [modes, setModes] = useState<any>(null);
+  const [mode, setMode] = useState<string>(() => (storage.get<string>(KEYS.mode) as any) || 'default');
+  useEffect(() => { (async () => { try { setModes(await api.modesPresets()); } catch {} })(); }, []);
 
   const [integrations, setIntegrations] = useState([
     {
@@ -148,6 +159,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
       badgeColor: 'var(--app-purple)'
     },
     {
+      id: 'accessibility',
+      title: 'Acessibilidade',
+      icon: <Smartphone size={20} />,
+      description: 'Fonte e alto contraste',
+      badge: `${Math.round((fontScale||1)*100)}%`,
+      badgeColor: 'var(--app-green)'
+    },
+    {
       id: 'privacy',
       title: 'Privacidade',
       icon: <Shield size={20} />,
@@ -156,12 +175,36 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
       badgeColor: 'var(--app-green)'
     },
     {
+      id: 'modes',
+      title: 'Modos',
+      icon: <Settings size={20} />,
+      description: 'Presets Estudante/Autônomo',
+      badge: mode === 'default' ? 'Padrão' : mode,
+      badgeColor: 'var(--app-blue)'
+    },
+    {
       id: 'ai-settings',
       title: 'Assistente IA',
       icon: <Brain size={20} />,
       description: 'Configure sugestões inteligentes',
       badge: 'Ativo',
       badgeColor: 'var(--app-green)'
+    },
+    {
+      id: 'referrals',
+      title: 'Convide Amigos',
+      icon: <Zap size={20} />,
+      description: 'Ganhe 1 mês Premium por convite',
+      badge: 'Convide',
+      badgeColor: 'var(--app-yellow)'
+    },
+    {
+      id: 'reports',
+      title: 'Resumo Semanal',
+      icon: <ExternalLink size={20} />,
+      description: 'Enviar resumo por email/push',
+      badge: 'Manual',
+      badgeColor: 'var(--app-gray)'
     },
     {
       id: 'premium',
@@ -505,10 +548,65 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
         )}
         {selectedSection === 'privacy' && (
           <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
-            <h3 className="font-medium text-[var(--app-text)] mb-4">Em breve...</h3>
-            <p className="text-sm text-[var(--app-text-light)]">
-              Configurações de privacidade serão implementadas em breve.
-            </p>
+            <h3 className="font-medium text-[var(--app-text)] mb-4">Privacidade</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-[var(--app-text)]">IA local quando possível</span>
+                <Switch checked={localAI} onCheckedChange={(v) => { setLocalAI(!!v); storage.set(KEYS.privacyLocalAI, !!v); }} />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-[var(--app-text)]">Compartilhamento de dados anônimo</span>
+                <Switch checked={dataShare} onCheckedChange={(v) => { setDataShare(!!v); storage.set(KEYS.privacyDataShare, !!v); }} />
+              </div>
+            </div>
+          </Card>
+        )}
+        {selectedSection === 'accessibility' && (
+          <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+            <h3 className="font-medium text-[var(--app-text)] mb-4">Acessibilidade</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-[var(--app-text)]">Alto contraste</span>
+                <Switch checked={highContrast} onCheckedChange={(v) => { setHighContrast(!!v); storage.set(KEYS.accessibilityHighContrast, !!v); }} />
+              </div>
+              <div>
+                <div className="text-sm text-[var(--app-text)] mb-2">Tamanho da fonte ({Math.round(fontScale*100)}%)</div>
+                <input type="range" min="0.85" max="1.4" step="0.05" value={fontScale} onChange={(e) => { const v = parseFloat(e.target.value); setFontScale(v); storage.set(KEYS.accessibilityFontScale, v); }} className="w-full" />
+              </div>
+            </div>
+          </Card>
+        )}
+        {selectedSection === 'modes' && (
+          <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+            <h3 className="font-medium text-[var(--app-text)] mb-4">Modos</h3>
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Button variant={mode==='default'?undefined:'outline'} onClick={() => { setMode('default'); storage.set(KEYS.mode, 'default'); }}>Padrão</Button>
+                <Button variant={mode==='student'?undefined:'outline'} onClick={() => { setMode('student'); storage.set(KEYS.mode, 'student'); }}>Estudante</Button>
+                <Button variant={mode==='freelancer'?undefined:'outline'} onClick={() => { setMode('freelancer'); storage.set(KEYS.mode, 'freelancer'); }}>Autônomo</Button>
+              </div>
+              {modes && (
+                <div className="text-xs text-[var(--app-text-light)]">Sugestão: {mode==='student' ? '3 blocos de foco • relatórios de estudo' : mode==='freelancer' ? '2 blocos de foco • relatórios por cliente' : 'Configurável'}</div>
+              )}
+            </div>
+          </Card>
+        )}
+        {selectedSection === 'referrals' && (
+          <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+            <h3 className="font-medium text-[var(--app-text)] mb-4">Convide Amigos</h3>
+            <div className="flex items-center space-x-2 mb-3">
+              <Button onClick={async () => { try { const r = await api.createReferral(); navigator.clipboard.writeText(r.code); alert('Código copiado: ' + r.code); } catch {} }}>Gerar código</Button>
+              <input id="ref-code" placeholder="Código" className="flex-1 p-3 rounded-xl bg-[var(--app-light-gray)] border-0" />
+              <Button variant="outline" onClick={async () => { const el = document.getElementById('ref-code') as HTMLInputElement|null; const code = el?.value?.trim(); if (!code) return; try { const r = await api.redeemReferral({ code }); alert(`Resgatado! +${r.bonusDays} dias`); } catch { alert('Falha ao resgatar'); } }}>Resgatar</Button>
+            </div>
+            <div className="text-xs text-[var(--app-text-light)]">1 mês Premium por convite ativado.</div>
+          </Card>
+        )}
+        {selectedSection === 'reports' && (
+          <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+            <h3 className="font-medium text-[var(--app-text)] mb-4">Resumo Semanal</h3>
+            <Button onClick={async () => { try { await api.weeklyDispatch(); alert('Resumo semanal enviado'); } catch { alert('Falha ao enviar'); } }}>Enviar agora</Button>
+            <div className="mt-2 text-xs text-[var(--app-text-light)]">Serão adicionadas preferências de agendamento em breve.</div>
           </Card>
         )}
         {selectedSection === 'ai-settings' && (
