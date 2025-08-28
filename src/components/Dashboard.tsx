@@ -34,6 +34,53 @@ import { api } from '../services/api';
 const Dashboard: React.FC = () => {
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
   const [showPremium, setShowPremium] = useState(false);
+  const [toasts, setToasts] = useState<Array<{id: string; message: string; type: 'success' | 'info' | 'error'}>>([]);
+  const [showReschedule, setShowReschedule] = useState(false);
+  const [rescheduleSuggestions, setRescheduleSuggestions] = useState<any[]>([]);
+  const [userStats, setUserStats] = useState<any>(null);
+  const [achievements, setAchievements] = useState<any[]>([]);
+
+  const showToast = (message: string, type: 'success' | 'info' | 'error' = 'info') => {
+    const id = Math.random().toString(36).slice(2);
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+  };
+
+  const triggerReschedule = async () => {
+    try {
+      const suggestions = await api.orchestrateReschedule({
+        impactedTasks: [
+          { id: 'task1', title: 'Reunião cancelada', durationMin: 60 },
+          { id: 'task2', title: 'Relatório urgente', durationMin: 30 }
+        ],
+        nextBlocks: [
+          { start: new Date(Date.now() + 30 * 60000).toISOString() },
+          { start: new Date(Date.now() + 90 * 60000).toISOString() }
+        ]
+      });
+      setRescheduleSuggestions(suggestions.suggestions || []);
+      setShowReschedule(true);
+    } catch (e) {
+      showToast('Erro ao buscar reagendamentos', 'error');
+    }
+  };
+
+  // Load gamification data
+  useEffect(() => {
+    const loadGamification = async () => {
+      try {
+        const [stats, achievementsList] = await Promise.all([
+          api.getStats(),
+          api.getAchievements()
+        ]);
+        setUserStats(stats);
+        setAchievements(achievementsList);
+      } catch (e) {
+        console.error('Error loading gamification data:', e);
+      }
+    };
+    loadGamification();
+  }, []);
 
   // Sample data for charts
   const productivityData = [
@@ -511,29 +558,155 @@ const Dashboard: React.FC = () => {
         </div>
       </Card>
 
+      {/* Gamification Stats */}
+      {userStats && (
+        <Card className="p-6 bg-gradient-to-r from-[var(--app-purple)] to-[var(--app-blue)] rounded-2xl border-0 shadow-sm text-white">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="font-medium text-white">Nível {userStats.level}</h3>
+              <p className="text-white/80 text-sm">Progresso para o próximo nível</p>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-bold">{userStats.points}</div>
+              <div className="text-sm text-white/80">pontos</div>
+            </div>
+          </div>
+          <div className="mb-4">
+            <div className="flex justify-between text-sm mb-1">
+              <span>Nível {userStats.level}</span>
+              <span>Nível {userStats.level + 1}</span>
+            </div>
+            <div className="w-full bg-white/20 rounded-full h-2">
+              <div 
+                className="bg-white h-2 rounded-full transition-all"
+                style={{ width: `${((userStats.points % 100) / 100) * 100}%` }}
+              />
+            </div>
+          </div>
+          {achievements.length > 0 && (
+            <div className="flex items-center space-x-2">
+              <Trophy size={16} className="text-[var(--app-yellow)]" />
+              <span className="text-sm">{achievements.length} conquistas desbloqueadas</span>
+            </div>
+          )}
+        </Card>
+      )}
+
       {/* Quick Actions */}
       <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
         <h3 className="font-medium text-[var(--app-text)] mb-4">Ações Rápidas</h3>
         <div className="grid grid-cols-2 gap-4">
-          <button className="flex items-center space-x-3 p-4 bg-[var(--app-blue)]15 rounded-xl hover:bg-[var(--app-blue)]20 transition-all group">
+          <button
+            onClick={async () => {
+              try {
+                const insights = await api.weeklyInsights();
+                if (insights.insights && insights.insights.length > 0) {
+                  const topInsight = insights.insights[0];
+                  showToast(`${topInsight.title}: ${topInsight.text}`, 'info');
+                } else {
+                  showToast('Nenhum insight disponível ainda', 'info');
+                }
+              } catch (e) {
+                showToast('Erro ao buscar insights', 'error');
+              }
+            }}
+            className="flex items-center space-x-3 p-4 bg-[var(--app-blue)]15 rounded-xl hover:bg-[var(--app-blue)]20 transition-all group">
             <Brain size={20} style={{ color: 'var(--app-blue)' }} />
             <span className="text-sm font-medium text-[var(--app-text)] group-hover:text-[var(--app-blue)] transition-colors">Sessão Foco</span>
           </button>
-          <button className="flex items-center space-x-3 p-4 bg-[var(--app-green)]15 rounded-xl hover:bg-[var(--app-green)]20 transition-all group">
+          <button
+            onClick={async () => {
+              try {
+                const opp = await api.findOpportunities(30);
+                if (opp && opp.length > 0) {
+                  showToast(`Oportunidade: ${opp[0].title}`, 'info');
+                } else {
+                  showToast('Nenhuma oportunidade encontrada', 'info');
+                }
+              } catch (e) {
+                showToast('Erro ao buscar oportunidades', 'error');
+              }
+            }}
+            className="flex items-center space-x-3 p-4 bg-[var(--app-green)]15 rounded-xl hover:bg-[var(--app-green)]20 transition-all group">
             <Heart size={20} style={{ color: 'var(--app-green)' }} />
             <span className="text-sm font-medium text-[var(--app-text)] group-hover:text-[var(--app-green)] transition-colors">Bem-estar</span>
           </button>
-          <button className="flex items-center space-x-3 p-4 bg-[var(--app-yellow)]15 rounded-xl hover:bg-[var(--app-yellow)]20 transition-all group">
+          <button
+            onClick={triggerReschedule}
+            className="flex items-center space-x-3 p-4 bg-[var(--app-yellow)]15 rounded-xl hover:bg-[var(--app-yellow)]20 transition-all group">
             <MessageCircle size={20} style={{ color: 'var(--app-yellow)' }} />
             <span className="text-sm font-medium text-[var(--app-text)] group-hover:text-[var(--app-yellow)] transition-colors">Assistente IA</span>
           </button>
-          <button className="flex items-center space-x-3 p-4 bg-[var(--app-purple)]15 rounded-xl hover:bg-[var(--app-purple)]20 transition-all group">
+          <button
+            onClick={async () => {
+              try {
+                const windowResp = await api.nextNotificationWindow({ candidateWindows: [{ start: new Date().toISOString(), end: new Date(Date.now()+30*60000).toISOString() }] });
+                showToast(`Próxima notificação: score ${Math.round(windowResp.score * 100)}%`, 'info');
+              } catch (e) {
+                showToast('Erro ao calcular janela', 'error');
+              }
+            }}
+            className="flex items-center space-x-3 p-4 bg-[var(--app-purple)]15 rounded-xl hover:bg-[var(--app-purple)]20 transition-all group">
             <Coffee size={20} style={{ color: 'var(--app-purple)' }} />
             <span className="text-sm font-medium text-[var(--app-text)] group-hover:text-[var(--app-purple)] transition-colors">Pausa</span>
           </button>
         </div>
       </Card>
       <PremiumModal open={showPremium} onClose={() => setShowPremium(false)} />
+
+      {/* Reschedule Modal */}
+      {showReschedule && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md m-4 p-6 rounded-2xl bg-[var(--app-card)] border border-[var(--app-light-gray)]">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-[var(--app-text)]">Reagendamento Sugerido</h3>
+              <button
+                onClick={() => setShowReschedule(false)}
+                className="p-2 rounded-lg hover:bg-[var(--app-light-gray)]"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-3">
+              {rescheduleSuggestions.map((suggestion, idx) => (
+                <div key={idx} className="p-3 border border-[var(--app-light-gray)] rounded-xl">
+                  <div className="text-sm text-[var(--app-text)] mb-1">
+                    {suggestion.reason}
+                  </div>
+                  <div className="text-xs text-[var(--app-text-light)]">
+                    {new Date(suggestion.suggestedStart).toLocaleTimeString()} - {new Date(suggestion.suggestedEnd).toLocaleTimeString()}
+                  </div>
+                  <button
+                    onClick={() => {
+                      showToast('Reagendamento aplicado!', 'success');
+                      setShowReschedule(false);
+                    }}
+                    className="mt-2 w-full py-2 bg-[var(--app-blue)] text-white rounded-lg text-sm"
+                  >
+                    Aplicar 1‑toque
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast notifications */}
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        {toasts.map(toast => (
+          <div
+            key={toast.id}
+            className={`px-4 py-3 rounded-xl shadow-lg max-w-sm transition-all ${
+              toast.type === 'success' ? 'bg-[var(--app-green)] text-white' :
+              toast.type === 'error' ? 'bg-[var(--app-red)] text-white' :
+              'bg-[var(--app-blue)] text-white'
+            }`}
+          >
+            {toast.message}
+          </div>
+        ))}
+      </div>
     </div>
   );
 };

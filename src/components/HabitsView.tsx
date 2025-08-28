@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { CheckCircle, Circle, Flame, Target, TrendingUp } from 'lucide-react';
+import { CheckCircle, Circle, Flame, Target, TrendingUp, Heart, Zap, Moon } from 'lucide-react';
 import { Card } from './ui/card';
 import { Progress } from './ui/progress';
+import { api } from '../services/api';
 
 const HabitsView: React.FC = () => {
+  const [showCheckin, setShowCheckin] = useState(false);
+  const [checkinData, setCheckinData] = useState({ mood: 3, energy: 3, sleepHours: 7 });
   const [habits, setHabits] = useState([
     {
       id: 1,
@@ -68,6 +71,22 @@ const HabitsView: React.FC = () => {
     }));
   };
 
+  const submitCheckin = async () => {
+    try {
+      // Send checkin data to backend for orchestrator
+      await api.createCheckin({
+        habitId: 'daily',
+        date: new Date().toISOString(),
+        mood: checkinData.mood,
+        energy: checkinData.energy,
+        sleepHours: checkinData.sleepHours
+      });
+      setShowCheckin(false);
+    } catch (e) {
+      console.error('Error submitting checkin:', e);
+    }
+  };
+
   const completedHabits = habits.filter(h => h.completedToday).length;
   const totalHabits = habits.length;
   const completionPercentage = Math.round((completedHabits / totalHabits) * 100);
@@ -85,6 +104,76 @@ const HabitsView: React.FC = () => {
           <span className="font-semibold text-gray-900">8 dias</span>
         </div>
       </div>
+
+      {/* Daily Check-in */}
+      <Card className="p-6 bg-white rounded-2xl border-0 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-medium text-gray-900">Check-in Diário</h3>
+          <button
+            onClick={() => setShowCheckin(!showCheckin)}
+            className="px-3 py-1 bg-[var(--app-blue)] text-white rounded-lg text-sm"
+          >
+            {showCheckin ? 'Cancelar' : 'Abrir'}
+          </button>
+        </div>
+        {showCheckin && (
+          <div className="space-y-4">
+            <div>
+              <label className="flex items-center space-x-2 text-sm text-gray-700 mb-2">
+                <Heart size={16} />
+                <span>Humor (1-5)</span>
+              </label>
+              <input
+                type="range"
+                min="1"
+                max="5"
+                value={checkinData.mood}
+                onChange={(e) => setCheckinData(prev => ({ ...prev, mood: parseInt(e.target.value) }))}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>😞</span>
+                <span>😐</span>
+                <span>😊</span>
+              </div>
+            </div>
+            <div>
+              <label className="flex items-center space-x-2 text-sm text-gray-700 mb-2">
+                <Zap size={16} />
+                <span>Energia (1-5)</span>
+              </label>
+              <input
+                type="range"
+                min="1"
+                max="5"
+                value={checkinData.energy}
+                onChange={(e) => setCheckinData(prev => ({ ...prev, energy: parseInt(e.target.value) }))}
+                className="w-full"
+              />
+            </div>
+            <div>
+              <label className="flex items-center space-x-2 text-sm text-gray-700 mb-2">
+                <Moon size={16} />
+                <span>Horas de sono</span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="12"
+                value={checkinData.sleepHours}
+                onChange={(e) => setCheckinData(prev => ({ ...prev, sleepHours: parseInt(e.target.value) || 0 }))}
+                className="w-full p-2 border rounded-lg"
+              />
+            </div>
+            <button
+              onClick={submitCheckin}
+              className="w-full py-2 bg-[var(--app-green)] text-white rounded-lg"
+            >
+              Enviar Check-in
+            </button>
+          </div>
+        )}
+      </Card>
 
       {/* Progress Overview */}
       <Card className="p-6 bg-white rounded-2xl border-0 shadow-sm">

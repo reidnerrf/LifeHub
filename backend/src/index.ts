@@ -38,10 +38,76 @@ const NoteSchema = new Schema({
   content: { type: String, default: '' },
   tags: [{ type: String }],
 }, { timestamps: true });
+const SuggestionSchema = new Schema({
+  userId: { type: String, index: true },
+  title: { type: String, required: true },
+  description: { type: String, default: '' },
+  kind: { type: String, default: 'generic' },
+  metadata: { type: Schema.Types.Mixed },
+}, { timestamps: true });
+
+// Additional core models
+const EventSchema = new Schema({
+  userId: { type: String, index: true },
+  title: { type: String, required: true },
+  start: { type: Date, required: true },
+  end: { type: Date, required: true },
+  location: { type: String },
+  source: { type: String, default: 'local' }
+}, { timestamps: true });
+
+const HabitSchema = new Schema({
+  userId: { type: String, index: true },
+  name: { type: String, required: true },
+  schedule: { type: String, default: 'daily' },
+  target: { type: Number, default: 1 }
+}, { timestamps: true });
+
+const CheckinSchema = new Schema({
+  userId: { type: String, index: true },
+  habitId: { type: String, index: true },
+  date: { type: Date, required: true },
+  mood: { type: Number },
+  energy: { type: Number },
+  sleepHours: { type: Number }
+}, { timestamps: true });
+
+const TransactionSchema = new Schema({
+  userId: { type: String, index: true },
+  type: { type: String, enum: ['payable','receivable'], required: true },
+  amount: { type: Number, required: true },
+  dueDate: { type: Date },
+  description: { type: String }
+}, { timestamps: true });
+
+const UserStatsSchema = new Schema({
+  userId: { type: String, index: true },
+  points: { type: Number, default: 0 },
+  level: { type: Number, default: 1 },
+  streakDays: { type: Number, default: 0 },
+  achievements: [{ type: String }],
+  lastActivity: { type: Date, default: Date.now }
+}, { timestamps: true });
+
+const AchievementSchema = new Schema({
+  userId: { type: String, index: true },
+  type: { type: String, required: true }, // 'task_completion', 'habit_streak', 'focus_session', etc.
+  title: { type: String, required: true },
+  description: { type: String, required: true },
+  points: { type: Number, required: true },
+  unlockedAt: { type: Date, default: Date.now }
+}, { timestamps: true });
 
 const User = model('User', UserSchema);
 const Task = model('Task', TaskSchema);
 const Note = model('Note', NoteSchema);
+const Suggestion = model('Suggestion', SuggestionSchema);
+const Event = model('Event', EventSchema);
+const Habit = model('Habit', HabitSchema);
+const Checkin = model('Checkin', CheckinSchema);
+const Transaction = model('Transaction', TransactionSchema);
+const UserStats = model('UserStats', UserStatsSchema);
+const Achievement = model('Achievement', AchievementSchema);
 
 // Auth
 const authMiddleware = (req: any, res: any, next: any) => {
@@ -53,6 +119,10 @@ const authMiddleware = (req: any, res: any, next: any) => {
       req.userId = decoded.sub;
     }
   } catch {}
+  // fallback X-User-Id header
+  if (!req.userId && req.headers['x-user-id']) {
+    req.userId = String(req.headers['x-user-id']);
+  }
   if (!req.userId) {
     return res.status(401).json({ error: 'unauthorized' });
   }
@@ -123,6 +193,109 @@ app.delete('/notes/:id', async (req, res) => {
   res.status(204).end();
 });
 
+// Suggestions CRUD
+app.get('/suggestions', async (req: any, res) => {
+  const userId = String(req.userId);
+  res.json(await Suggestion.find({ userId }).sort({ createdAt: -1 }));
+});
+app.post('/suggestions', async (req: any, res) => {
+  const userId = String(req.userId);
+  const s = await Suggestion.create({ ...req.body, userId });
+  res.status(201).json(s);
+});
+app.patch('/suggestions/:id', async (req, res) => {
+  const s = await Suggestion.findByIdAndUpdate(req.params.id, req.body, { new: true });
+  res.json(s);
+});
+app.delete('/suggestions/:id', async (req, res) => {
+  await Suggestion.findByIdAndDelete(req.params.id);
+  res.status(204).end();
+});
+
+// Check-ins CRUD
+app.get('/checkins', async (req: any, res) => {
+  const userId = String(req.userId);
+  res.json(await Checkin.find({ userId }).sort({ createdAt: -1 }));
+});
+app.post('/checkins', async (req: any, res) => {
+  const userId = String(req.userId);
+  const c = await Checkin.create({ ...req.body, userId });
+  
+  // Award points for daily check-in
+  await awardPoints(userId, 10, 'Daily check-in completed');
+  
+  res.status(201).json(c);
+});
+
+// Gamification functions
+async function awardPoints(userId: string, points: number, reason: string) {
+  let stats = await UserStats.findOne({ userId });
+  if (!stats) {
+    stats = await UserStats.create({ userId, points: 0, level: 1, streakDays: 0 });
+  }
+  
+  stats.points += points;
+  stats.lastActivity = new Date();
+  
+  // Level up logic
+  const newLevel = Math.floor(stats.points / 100) + 1;
+  if (newLevel > stats.level) {
+    stats.level = newLevel;
+    await Achievement.create({
+      userId,
+      type: 'level_up',
+      title: `Nível ${newLevel}`,
+      description: `Parabéns! Você alcançou o nível ${newLevel}`,
+      points: 50
+    });
+  }
+  
+  await stats.save();
+  return stats;
+}
+
+async function checkAchievements(userId: string) {
+  const stats = await UserStats.findOne({ userId });
+  if (!stats) return;
+  
+  // Check for various achievements
+  const achievements = [];
+  
+  // Task completion achievements
+  const completedTasks = await Task.countDocuments({ userId, completed: true });
+  if (completedTasks >= 10 && !stats.achievements.includes('task_master_10')) {
+    achievements.push({
+      type: 'task_completion',
+      title: 'Mestre das Tarefas',
+      description: 'Completou 10 tarefas',
+      points: 25
+    });
+    stats.achievements.push('task_master_10');
+  }
+  
+  // Habit streak achievements
+  if (stats.streakDays >= 7 && !stats.achievements.includes('habit_streak_7')) {
+    achievements.push({
+      type: 'habit_streak',
+      title: 'Semana Consistente',
+      description: 'Manteve hábitos por 7 dias seguidos',
+      points: 50
+    });
+    stats.achievements.push('habit_streak_7');
+  }
+  
+  // Create achievements
+  for (const achievement of achievements) {
+    await Achievement.create({ userId, ...achievement });
+  }
+  
+  if (achievements.length > 0) {
+    await stats.save();
+  }
+  
+  return achievements;
+}
+
 // AI suggestions (stub)
 app.get('/ai/suggestions', (_req, res) => {
   res.json([
@@ -175,6 +348,310 @@ app.post('/ai/reschedule', (req, res) => {
 app.post('/integrations/google/import', async (req, res) => {
   // Stub: pretend we imported 3 events
   res.json({ imported: 3, status: 'ok' });
+});
+
+// Enhanced Orchestrator with better heuristics
+app.post('/orchestrator/schedule', async (req: any, res) => {
+  const { tasks = [], events = [], freeBlocks = [], userPreferences = {} } = req.body || {};
+  
+  // Get recent check-ins for energy/mood patterns
+  const recentCheckins = await Checkin.find({ userId: req.userId })
+    .sort({ createdAt: -1 })
+    .limit(7);
+  
+  const avgEnergy = recentCheckins.length > 0 
+    ? recentCheckins.reduce((sum, c) => sum + (c.energy || 3), 0) / recentCheckins.length 
+    : 3;
+  
+  const avgMood = recentCheckins.length > 0
+    ? recentCheckins.reduce((sum, c) => sum + (c.mood || 3), 0) / recentCheckins.length
+    : 3;
+
+  // Score each task based on priority, energy requirements, and user patterns
+  const scoredTasks = tasks.map((task: any) => {
+    let score = 0;
+    
+    // Priority scoring
+    if (task.priority === 'high') score += 30;
+    else if (task.priority === 'medium') score += 20;
+    else score += 10;
+    
+    // Energy alignment (complex tasks when energy is high)
+    const taskComplexity = task.durationMin > 60 ? 'high' : task.durationMin > 30 ? 'medium' : 'low';
+    if (taskComplexity === 'high' && avgEnergy >= 4) score += 20;
+    else if (taskComplexity === 'medium' && avgEnergy >= 3) score += 15;
+    else if (taskComplexity === 'low') score += 10;
+    
+    // Time of day preferences (morning person vs night owl)
+    const hour = new Date().getHours();
+    const isMorningPerson = userPreferences.morningPerson || false;
+    if (isMorningPerson && hour < 12) score += 15;
+    else if (!isMorningPerson && hour >= 14) score += 15;
+    
+    return { ...task, score };
+  }).sort((a: any, b: any) => b.score - a.score);
+
+  // Allocate tasks to best available slots
+  const allocations = scoredTasks.map((task: any, idx: number) => {
+    const block = freeBlocks[idx % Math.max(1, freeBlocks.length)] || {};
+    const start = new Date(block.start || new Date());
+    const end = new Date(start.getTime() + ((task.durationMin || 30) * 60000));
+    
+    let reason = 'Alocação otimizada';
+    if (task.score >= 50) reason = 'Alta prioridade + energia ideal';
+    else if (task.score >= 35) reason = 'Prioridade média + bom momento';
+    else reason = 'Slot disponível';
+    
+    return { 
+      taskId: task.id, 
+      start: start.toISOString(), 
+      end: end.toISOString(), 
+      reason,
+      score: task.score
+    };
+  });
+  
+  res.json({ allocations, insights: { avgEnergy, avgMood } });
+});
+
+app.post('/orchestrator/reschedule', async (req, res) => {
+  const { impactedTasks = [], nextBlocks = [] } = req.body || {};
+  const suggestions = impactedTasks.slice(0, nextBlocks.length).map((t: any, i: number) => {
+    const s = new Date(nextBlocks[i].start || new Date());
+    const e = new Date(s.getTime() + ((t.durationMin || 30) * 60000));
+    return { taskId: t.id, suggestedStart: s.toISOString(), suggestedEnd: e.toISOString(), reason: 'Reagendamento automático' };
+  });
+  res.json({ suggestions });
+});
+
+app.get('/orchestrator/opportunities', async (req: any, res) => {
+  const { minutes = 30 } = req.query as any;
+  res.json([{ id: 'opp1', title: `Você tem ${minutes}min livres`, suggestion: 'Adiantar tarefa de alta prioridade' }]);
+});
+
+// Enhanced Notifications targeting with smart timing
+app.post('/notifications/next-window', async (req: any, res) => {
+  const { candidateWindows = [] } = req.body || {};
+  const userId = String(req.userId);
+  
+  // Get user's recent activity patterns
+  const recentCheckins = await Checkin.find({ userId })
+    .sort({ createdAt: -1 })
+    .limit(7);
+  
+  const recentTasks = await Task.find({ userId })
+    .sort({ createdAt: -1 })
+    .limit(10);
+  
+  // Calculate optimal notification timing
+  const now = new Date();
+  const currentHour = now.getHours();
+  
+  // Base scoring on time of day preferences
+  let bestWindow = candidateWindows[0] || { start: now, end: new Date(now.getTime() + 30 * 60000) };
+  let bestScore = 0;
+  
+  for (const window of candidateWindows) {
+    let score = 0;
+    const windowStart = new Date(window.start);
+    const windowHour = windowStart.getHours();
+    
+    // Time of day scoring (avoid early morning and late night)
+    if (windowHour >= 8 && windowHour <= 10) score += 30; // Morning peak
+    else if (windowHour >= 14 && windowHour <= 16) score += 25; // Afternoon peak
+    else if (windowHour >= 19 && windowHour <= 21) score += 20; // Evening
+    else if (windowHour >= 6 && windowHour <= 22) score += 10; // Acceptable hours
+    else score -= 20; // Avoid late night/early morning
+    
+    // Energy-based scoring
+    if (recentCheckins.length > 0) {
+      const avgEnergy = recentCheckins.reduce((sum: number, c: any) => sum + (c.energy || 3), 0) / recentCheckins.length;
+      if (avgEnergy >= 4) score += 15; // High energy = good time for notifications
+      else if (avgEnergy <= 2) score -= 10; // Low energy = avoid notifications
+    }
+    
+    // Task completion pattern
+    const completedToday = recentTasks.filter((t: any) => t.completed && 
+      new Date(t.createdAt).toDateString() === now.toDateString()).length;
+    if (completedToday >= 3) score += 10; // User is productive today
+    else if (completedToday === 0) score -= 5; // User hasn't completed anything today
+    
+      // Avoid notification fatigue (don't notify too frequently)
+  const userStats = await UserStats.findOne({ userId });
+  const timeSinceLastActivity = userStats?.lastActivity ? 
+    (now.getTime() - new Date(userStats.lastActivity).getTime()) / (1000 * 60) : 0;
+  if (timeSinceLastActivity < 30) score -= 20; // Too recent
+    
+    if (score > bestScore) {
+      bestScore = score;
+      bestWindow = window;
+    }
+  }
+  
+  // Normalize score to 0-1 range
+  const normalizedScore = Math.max(0, Math.min(1, bestScore / 100));
+  
+  res.json({ 
+    window: bestWindow, 
+    score: normalizedScore,
+    reason: bestScore >= 50 ? 'Momento ideal baseado em seus padrões' :
+            bestScore >= 30 ? 'Bom momento para notificação' :
+            'Momento aceitável'
+  });
+});
+
+// Gamification endpoints
+app.get('/gamification/stats', async (req: any, res) => {
+  const userId = String(req.userId);
+  let stats = await UserStats.findOne({ userId });
+  if (!stats) {
+    stats = await UserStats.create({ userId, points: 0, level: 1, streakDays: 0 });
+  }
+  res.json(stats);
+});
+
+app.get('/gamification/achievements', async (req: any, res) => {
+  const userId = String(req.userId);
+  const achievements = await Achievement.find({ userId }).sort({ unlockedAt: -1 });
+  res.json(achievements);
+});
+
+app.post('/gamification/complete-task', async (req: any, res) => {
+  const userId = String(req.userId);
+  const { taskId } = req.body;
+  
+  // Award points for task completion
+  await awardPoints(userId, 15, 'Task completed');
+  
+  // Check for new achievements
+  const newAchievements = await checkAchievements(userId);
+  
+  res.json({ 
+    pointsAwarded: 15, 
+    newAchievements: newAchievements || [],
+    message: 'Tarefa completada! +15 pontos'
+  });
+});
+
+// RAG stubs on notes
+app.post('/rag/notes/search', async (req: any, res) => {
+  const { query = '' } = req.body || {};
+  res.json({ query, results: [] });
+});
+app.post('/rag/notes/summarize', async (req: any, res) => {
+  const { noteId } = req.body || {};
+  res.json({ noteId, summary: 'Resumo indisponível (stub).' });
+});
+
+// Enhanced Reports with cross-metrics analysis
+app.get('/reports/weekly-insights', async (req: any, res) => {
+  const userId = String(req.userId);
+  
+  // Get last 7 days of data
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  
+  const checkins = await Checkin.find({ 
+    userId, 
+    createdAt: { $gte: weekAgo } 
+  }).sort({ createdAt: -1 });
+  
+  const tasks = await Task.find({ 
+    userId, 
+    createdAt: { $gte: weekAgo } 
+  }).sort({ createdAt: -1 });
+  
+  const insights = [];
+  
+  // Sleep analysis
+  const sleepData = checkins.filter(c => c.sleepHours && c.sleepHours > 0).map(c => c.sleepHours!);
+  if (sleepData.length > 0) {
+    const avgSleep = sleepData.reduce((sum: number, h: number) => sum + h, 0) / sleepData.length;
+    const lowSleepDays = sleepData.filter(h => h < 6).length;
+    const completedTasks = tasks.filter(t => t.completed).length;
+    const totalTasks = tasks.length;
+    
+    if (lowSleepDays > 0 && totalTasks > 0) {
+      const completionRate = (completedTasks / totalTasks) * 100;
+      insights.push({
+        id: 'sleep-productivity',
+        type: 'correlation',
+        title: 'Sono vs Produtividade',
+        text: `Nos ${lowSleepDays} dias com <6h de sono, você completou ${completionRate.toFixed(0)}% das tarefas.`,
+        recommendation: 'Priorize 7-8h de sono para melhor produtividade.',
+        impact: 'high'
+      });
+    }
+  }
+  
+  // Energy patterns
+  const energyData = checkins.filter(c => c.energy && c.energy > 0).map(c => c.energy!);
+  if (energyData.length > 0) {
+    const avgEnergy = energyData.reduce((sum: number, e: number) => sum + e, 0) / energyData.length;
+    const highEnergyDays = energyData.filter(e => e >= 4).length;
+    
+    insights.push({
+      id: 'energy-pattern',
+      type: 'pattern',
+      title: 'Padrão de Energia',
+      text: `Sua energia média foi ${avgEnergy.toFixed(1)}/5. ${highEnergyDays} dias com alta energia.`,
+      recommendation: highEnergyDays > 3 ? 'Agende tarefas complexas nos dias de alta energia.' : 'Considere melhorar hábitos de sono e exercício.',
+      impact: 'medium'
+    });
+  }
+  
+  // Mood trends
+  const moodData = checkins.filter(c => c.mood && c.mood > 0).map(c => c.mood!);
+  if (moodData.length > 0) {
+    const avgMood = moodData.reduce((sum: number, m: number) => sum + m, 0) / moodData.length;
+    const lowMoodDays = moodData.filter(m => m <= 2).length;
+    
+    if (lowMoodDays > 0) {
+      insights.push({
+        id: 'mood-insight',
+        type: 'trend',
+        title: 'Tendência de Humor',
+        text: `Humor médio: ${avgMood.toFixed(1)}/5. ${lowMoodDays} dias com humor baixo.`,
+        recommendation: 'Considere atividades de autocuidado e pausas mais frequentes.',
+        impact: 'medium'
+      });
+    }
+  }
+  
+  // Task completion patterns
+  if (tasks.length > 0) {
+    const completedTasks = tasks.filter(t => t.completed);
+    const completionRate = (completedTasks.length / tasks.length) * 100;
+    
+    insights.push({
+      id: 'task-completion',
+      type: 'performance',
+      title: 'Taxa de Conclusão',
+      text: `Você completou ${completionRate.toFixed(0)}% das ${tasks.length} tarefas da semana.`,
+      recommendation: completionRate < 70 ? 'Considere reduzir o número de tarefas ou melhorar o planejamento.' : 'Excelente! Mantenha o ritmo.',
+      impact: 'high'
+    });
+  }
+  
+  res.json({
+    period: 'last_7_days',
+    insights,
+    summary: {
+      totalCheckins: checkins.length,
+      totalTasks: tasks.length,
+      completedTasks: tasks.filter(t => t.completed).length,
+      avgEnergy: energyData.length > 0 ? (energyData.reduce((sum: number, e: number) => sum + e, 0) / energyData.length).toFixed(1) : 'N/A',
+      avgMood: moodData.length > 0 ? (moodData.reduce((sum: number, m: number) => sum + m, 0) / moodData.length).toFixed(1) : 'N/A'
+    }
+  });
+});
+
+// Assistant endpoints
+app.post('/assistant/plan-week', async (req, res) => {
+  res.json({ message: 'Plano semanal gerado (stub)', actions: [] });
+});
+app.post('/assistant/ritual/pre-deep-work', async (req, res) => {
+  res.json({ steps: ['Respiração 2min', 'Preparar ambiente', 'Definir objetivo da sessão'] });
 });
 
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 4000;
