@@ -746,6 +746,46 @@ app.post('/billing/cancel', (req: any, res) => {
   res.json({ cancelled: true, refund });
 });
 
+// Voice Assistants Integration Stubs
+function parseVoiceCommand(text: string) {
+  const t = (text || '').toLowerCase();
+  if (t.includes('iniciar foco') || t.includes('start focus')) return { intent: 'start_focus' };
+  if (t.startsWith('adicionar tarefa') || t.startsWith('add task')) {
+    const title = t.replace(/^(adicionar tarefa|add task)/, '').trim();
+    return { intent: 'add_task', title: title || 'Tarefa' };
+  }
+  if (t.includes('próximo evento') || t.includes('next event')) return { intent: 'next_event' };
+  return { intent: 'unknown' };
+}
+
+app.post('/assistant/voice/command', async (req: any, res) => {
+  const { text = '', locale = 'pt-BR' } = req.body || {};
+  const parsed = parseVoiceCommand(text);
+  res.json({ ok: true, parsed, locale });
+});
+
+// Alexa webhook (ASK)
+app.post('/integrations/alexa/webhook', async (req: any, res) => {
+  // Minimal handler stub
+  const text = String(req.body?.request?.intent?.slots?.utterance?.value || '');
+  const parsed = parseVoiceCommand(text);
+  res.json({ version: '1.0', response: { outputSpeech: { type: 'PlainText', text: `Intent ${parsed.intent}` }, shouldEndSession: true } });
+});
+
+// Google Assistant (Dialogflow) webhook
+app.post('/integrations/google-assistant/webhook', async (req: any, res) => {
+  const text = String(req.body?.queryResult?.queryText || '');
+  const parsed = parseVoiceCommand(text);
+  res.json({ fulfillmentText: `Intent ${parsed.intent}` });
+});
+
+// Siri Shortcuts (via HTTP shortcut)
+app.get('/integrations/siri/shortcut', (req: any, res) => {
+  const text = String(req.query.text || '');
+  const parsed = parseVoiceCommand(text);
+  res.json({ ok: true, parsed });
+});
+
 app.get('/orchestrator/opportunities', async (req: any, res) => {
   const { minutes = 30 } = req.query as any;
   res.json([{ id: 'opp1', title: `Você tem ${minutes}min livres`, suggestion: 'Adiantar tarefa de alta prioridade' }]);

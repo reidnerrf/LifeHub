@@ -218,6 +218,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
       badgeColor: 'var(--app-green)'
     },
     {
+      id: 'voice-assistants',
+      title: 'Assistentes de Voz',
+      icon: <Microphone size={20} />,
+      description: 'Siri, Google Assistant, Alexa',
+      badge: 'Beta',
+      badgeColor: 'var(--app-purple)'
+    },
+    {
       id: 'referrals',
       title: 'Convide Amigos',
       icon: <Zap size={20} />,
@@ -651,6 +659,28 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
             <p className="text-sm text-[var(--app-text-light)]">
               Configurações do assistente IA serão implementadas em breve.
             </p>
+          </Card>
+        )}
+        {selectedSection === 'voice-assistants' && (
+          <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+            <h3 className="font-medium text-[var(--app-text)] mb-4">Assistentes de Voz</h3>
+            <div className="space-y-3 text-sm">
+              <div className="p-3 rounded-xl bg-[var(--app-light-gray)]">
+                <div className="font-medium mb-1">Siri Shortcuts</div>
+                <div className="text-[var(--app-text-light)] mb-2">Use a URL: /integrations/siri/shortcut?text=Adicionar tarefa Minha tarefa</div>
+                <Button size="sm" onClick={() => alert('Abra Atalhos > Ação URL e cole a URL acima.')}>Ver instruções</Button>
+              </div>
+              <div className="p-3 rounded-xl bg-[var(--app-light-gray)]">
+                <div className="font-medium mb-1">Google Assistant (Dialogflow)</div>
+                <div className="text-[var(--app-text-light)] mb-2">Aponte o webhook para /integrations/google-assistant/webhook</div>
+                <Button size="sm" onClick={() => alert('Configure o webhook no Dialogflow para o endpoint informado.')}>Ver instruções</Button>
+              </div>
+              <div className="p-3 rounded-xl bg-[var(--app-light-gray)]">
+                <div className="font-medium mb-1">Alexa (ASK)</div>
+                <div className="text-[var(--app-text-light)] mb-2">Configure o endpoint de skill para /integrations/alexa/webhook</div>
+                <Button size="sm" onClick={() => alert('No Alexa Developer Console, aponte para o endpoint.')}>Ver instruções</Button>
+              </div>
+            </div>
           </Card>
         )}
         {selectedSection === 'general' && renderGeneral()}
