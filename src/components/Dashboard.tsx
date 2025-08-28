@@ -200,6 +200,28 @@ const Dashboard: React.FC = () => {
         <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full -ml-12 -mb-12" />
       </Card>
 
+      {/* Auto-rescheduler */}
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-medium text-[var(--app-text)]">Reagendar automaticamente</h3>
+          <button
+            className="text-xs px-3 py-1 rounded-lg bg-[var(--app-blue)] text-white"
+            onClick={async () => {
+              try {
+                const payload = { tasks: [{ id: 't1', durationMin: 30 }], freeBlocks: [{ start: new Date().toISOString(), end: new Date(Date.now()+60*60*1000).toISOString() }] };
+                const res = await api.reschedule(payload);
+                alert(`Sugestões: ${res.suggestions.map(s => `${s.taskId} -> ${new Date(s.suggestedStart).toLocaleTimeString('pt-BR')}`).join(', ')}`);
+              } catch (e) {
+                alert('Não foi possível gerar sugestões agora.');
+              }
+            }}
+          >
+            Gerar sugestões
+          </button>
+        </div>
+        <p className="text-sm text-[var(--app-text-light)]">Gera horários sugeridos para suas tarefas livres com 1 toque.</p>
+      </Card>
+
       {/* Planning Score */}
       {planningScore && (
         <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
