@@ -1,0 +1,195 @@
+import React, { useState } from 'react';
+import { Plus, MoreVertical, Clock, Flag } from 'lucide-react';
+import { Card } from './ui/card';
+import { Badge } from './ui/badge';
+
+const TasksView: React.FC = () => {
+  const [selectedBoard, setSelectedBoard] = useState('kanban');
+
+  const tasks = {
+    todo: [
+      {
+        id: 1,
+        title: 'Revisar código do projeto',
+        description: 'Fazer code review das últimas mudanças',
+        priority: 'high',
+        dueDate: '2025-08-27',
+        tags: ['desenvolvimento', 'urgente'],
+      },
+      {
+        id: 2,
+        title: 'Planejar reunião semanal',
+        description: 'Preparar agenda e pontos importantes',
+        priority: 'medium',
+        dueDate: '2025-08-28',
+        tags: ['reunião'],
+      },
+    ],
+    inProgress: [
+      {
+        id: 3,
+        title: 'Criar apresentação Q3',
+        description: 'Slides para apresentação de resultados',
+        priority: 'high',
+        dueDate: '2025-08-29',
+        tags: ['apresentação', 'importante'],
+      },
+    ],
+    done: [
+      {
+        id: 4,
+        title: 'Responder emails',
+        description: 'Verificar e responder emails pendentes',
+        priority: 'low',
+        dueDate: '2025-08-26',
+        tags: ['email'],
+      },
+    ],
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'high':
+        return 'var(--app-yellow)';
+      case 'medium':
+        return 'var(--app-blue)';
+      case 'low':
+        return 'var(--app-green)';
+      default:
+        return 'var(--app-gray)';
+    }
+  };
+
+  const columns = [
+    { id: 'todo', title: 'A Fazer', color: 'var(--app-gray)', tasks: tasks.todo },
+    { id: 'inProgress', title: 'Em Progresso', color: 'var(--app-blue)', tasks: tasks.inProgress },
+    { id: 'done', title: 'Concluído', color: 'var(--app-green)', tasks: tasks.done },
+  ];
+
+  const TaskCard = ({ task }: { task: any }) => (
+    <Card className="p-4 bg-white rounded-xl border-0 shadow-sm mb-3">
+      <div className="flex items-start justify-between mb-2">
+        <h4 className="text-sm font-medium text-gray-900 line-clamp-2">{task.title}</h4>
+        <button className="text-[var(--app-gray)] p-1">
+          <MoreVertical size={16} />
+        </button>
+      </div>
+      
+      {task.description && (
+        <p className="text-xs text-[var(--app-gray)] mb-3 line-clamp-2">{task.description}</p>
+      )}
+      
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center space-x-2">
+          <Flag size={12} style={{ color: getPriorityColor(task.priority) }} />
+          <span className="text-xs text-[var(--app-gray)] capitalize">{task.priority}</span>
+        </div>
+        <div className="flex items-center space-x-1 text-xs text-[var(--app-gray)]">
+          <Clock size={12} />
+          <span>{new Date(task.dueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+        </div>
+      </div>
+      
+      <div className="flex flex-wrap gap-1">
+        {task.tags.map((tag: string, index: number) => (
+          <Badge key={index} variant="secondary" className="text-xs px-2 py-1 rounded-full">
+            {tag}
+          </Badge>
+        ))}
+      </div>
+    </Card>
+  );
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-semibold text-gray-900">Tarefas</h1>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setSelectedBoard('list')}
+            className={`px-3 py-1 rounded-lg text-sm ${
+              selectedBoard === 'list' 
+                ? 'bg-[var(--app-blue)] text-white' 
+                : 'bg-gray-100 text-[var(--app-gray)]'
+            }`}
+          >
+            Lista
+          </button>
+          <button
+            onClick={() => setSelectedBoard('kanban')}
+            className={`px-3 py-1 rounded-lg text-sm ${
+              selectedBoard === 'kanban' 
+                ? 'bg-[var(--app-blue)] text-white' 
+                : 'bg-gray-100 text-[var(--app-gray)]'
+            }`}
+          >
+            Kanban
+          </button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        {columns.map((column) => (
+          <Card key={column.id} className="p-4 bg-white rounded-xl border-0 shadow-sm text-center">
+            <div 
+              className="w-8 h-8 rounded-full mx-auto mb-2 flex items-center justify-center"
+              style={{ backgroundColor: `${column.color}15` }}
+            >
+              <span 
+                className="text-sm font-semibold"
+                style={{ color: column.color }}
+              >
+                {column.tasks.length}
+              </span>
+            </div>
+            <p className="text-xs text-[var(--app-gray)]">{column.title}</p>
+          </Card>
+        ))}
+      </div>
+
+      {/* Kanban Board */}
+      {selectedBoard === 'kanban' && (
+        <div className="flex-1 overflow-hidden">
+          <div className="flex space-x-4 overflow-x-auto pb-4" style={{ minHeight: '400px' }}>
+            {columns.map((column) => (
+              <div key={column.id} className="flex-shrink-0 w-72">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-2">
+                    <div 
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: column.color }}
+                    />
+                    <h3 className="font-medium text-gray-900">{column.title}</h3>
+                    <span className="text-sm text-[var(--app-gray)]">({column.tasks.length})</span>
+                  </div>
+                  <button className="text-[var(--app-gray)]">
+                    <Plus size={16} />
+                  </button>
+                </div>
+                
+                <div className="space-y-3">
+                  {column.tasks.map((task) => (
+                    <TaskCard key={task.id} task={task} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* List View */}
+      {selectedBoard === 'list' && (
+        <div className="flex-1 space-y-3">
+          {[...tasks.todo, ...tasks.inProgress, ...tasks.done].map((task) => (
+            <TaskCard key={task.id} task={task} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default TasksView;

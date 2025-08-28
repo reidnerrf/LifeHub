@@ -1,0 +1,334 @@
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --font-size: 14px;
+  --background: #F8F9FA;
+  --foreground: #1C1C1E;
+  --card: #ffffff;
+  --card-foreground: #1C1C1E;
+  --popover: #ffffff;
+  --popover-foreground: #1C1C1E;
+  --primary: #3A86FF;
+  --primary-foreground: #ffffff;
+  --secondary: #F1F5F9;
+  --secondary-foreground: #1C1C1E;
+  --muted: #F1F5F9;
+  --muted-foreground: #64748B;
+  --accent: #F1F5F9;
+  --accent-foreground: #1C1C1E;
+  --destructive: #EF4444;
+  --destructive-foreground: #ffffff;
+  --border: rgba(0, 0, 0, 0.1);
+  --input: transparent;
+  --input-background: #F1F5F9;
+  --switch-background: #E2E8F0;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --ring: #3A86FF;
+  --chart-1: #3A86FF;
+  --chart-2: #06D6A0;
+  --chart-3: #FFD166;
+  --chart-4: #FF6B6B;
+  --chart-5: #9C88FF;
+  --radius: 1rem;
+  
+  /* App Custom Colors */
+  --app-blue: #3A86FF;
+  --app-green: #06D6A0;
+  --app-yellow: #FFD166;
+  --app-red: #FF6B6B;
+  --app-purple: #9C88FF;
+  --app-bg: #F8F9FA;
+  --app-card: #ffffff;
+  --app-gray: #64748B;
+  --app-light-gray: #F1F5F9;
+  --app-dark-gray: #334155;
+  --app-text: #1C1C1E;
+  --app-text-light: #64748B;
+}
+
+.dark {
+  --background: #1C1C1E;
+  --foreground: #F8F9FA;
+  --card: #2D3748;
+  --card-foreground: #F8F9FA;
+  --popover: #2D3748;
+  --popover-foreground: #F8F9FA;
+  --primary: #3A86FF;
+  --primary-foreground: #ffffff;
+  --secondary: #4A5568;
+  --secondary-foreground: #F8F9FA;
+  --muted: #4A5568;
+  --muted-foreground: #A0AEC0;
+  --accent: #4A5568;
+  --accent-foreground: #F8F9FA;
+  --destructive: #FC8181;
+  --destructive-foreground: #1C1C1E;
+  --border: rgba(255, 255, 255, 0.1);
+  --input: #4A5568;
+  --input-background: #4A5568;
+  --switch-background: #4A5568;
+  --ring: #3A86FF;
+  
+  /* App Custom Colors Dark */
+  --app-blue: #3A86FF;
+  --app-green: #06D6A0;
+  --app-yellow: #FFD166;
+  --app-red: #FF6B6B;
+  --app-purple: #9C88FF;
+  --app-bg: #1C1C1E;
+  --app-card: #2D3748;
+  --app-gray: #A0AEC0;
+  --app-light-gray: #4A5568;
+  --app-dark-gray: #718096;
+  --app-text: #F8F9FA;
+  --app-text-light: #A0AEC0;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  
+  /* App Custom Colors */
+  --color-app-blue: var(--app-blue);
+  --color-app-green: var(--app-green);
+  --color-app-yellow: var(--app-yellow);
+  --color-app-red: var(--app-red);
+  --color-app-purple: var(--app-purple);
+  --color-app-bg: var(--app-bg);
+  --color-app-card: var(--app-card);
+  --color-app-gray: var(--app-gray);
+  --color-app-light-gray: var(--app-light-gray);
+  --color-app-dark-gray: var(--app-dark-gray);
+  --color-app-text: var(--app-text);
+  --color-app-text-light: var(--app-text-light);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-[var(--app-bg)] text-[var(--app-text)] transition-colors duration-300;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  /* Dark mode detection */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: #1C1C1E;
+      --foreground: #F8F9FA;
+      --card: #2D3748;
+      --card-foreground: #F8F9FA;
+      --app-bg: #1C1C1E;
+      --app-card: #2D3748;
+      --app-text: #F8F9FA;
+      --app-text-light: #A0AEC0;
+      --app-gray: #A0AEC0;
+      --app-light-gray: #4A5568;
+      --border: rgba(255, 255, 255, 0.1);
+    }
+  }
+}
+
+/**
+ * Base typography. This is not applied to elements which have an ancestor with a Tailwind text class.
+ */
+@layer base {
+  :where(:not(:has([class*=" text-"]), :not(:has([class^="text-"])))) {
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 600;
+      line-height: 1.4;
+      letter-spacing: -0.025em;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      line-height: 1.4;
+      letter-spacing: -0.025em;
+    }
+
+    h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      line-height: 1.4;
+    }
+
+    h4 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      line-height: 1.4;
+    }
+
+    p {
+      font-size: 1rem;
+      font-weight: 400;
+      line-height: 1.6;
+    }
+
+    label {
+      font-size: 0.875rem;
+      font-weight: 500;
+      line-height: 1.4;
+    }
+
+    button {
+      font-size: 0.875rem;
+      font-weight: 500;
+      line-height: 1.4;
+    }
+
+    input {
+      font-size: 1rem;
+      font-weight: 400;
+      line-height: 1.4;
+    }
+  }
+}
+
+/* Mobile-first responsive utilities */
+.mobile-container {
+  max-width: 428px;
+  margin: 0 auto;
+  background: var(--app-bg);
+  min-height: 100vh;
+  position: relative;
+}
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 24px);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 24px);
+}
+
+/* Custom scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--app-light-gray);
+  border-radius: 2px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--app-gray);
+}
+
+/* Animations */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-down {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.animate-slide-down {
+  animation: slide-down 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Glass effect */
+.glass-effect {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dark .glass-effect {
+  background: rgba(45, 55, 72, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Card shadows */
+.card-shadow {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+.card-shadow-lg {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
