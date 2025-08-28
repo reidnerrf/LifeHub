@@ -733,6 +733,19 @@ app.post('/ai/best-slot', async (req: any, res) => {
   res.json({ suggestedStart: start.toISOString(), suggestedEnd: end.toISOString(), reason: 'Menos conflitos + energia média alta' });
 });
 
+// Subscription cancel with pro-rated refund for annual (stub)
+app.post('/billing/cancel', (req: any, res) => {
+  const { plan, startedAt, amountAnnual } = req.body || {};
+  if (plan !== 'annual') return res.json({ cancelled: true, refund: 0 });
+  const start = new Date(startedAt || Date.now());
+  const end = new Date(start.getFullYear()+1, start.getMonth(), start.getDate());
+  const totalMs = end.getTime() - start.getTime();
+  const remainingMs = Math.max(0, end.getTime() - Date.now());
+  const ratio = remainingMs / totalMs;
+  const refund = Math.round((amountAnnual || 14990) * ratio);
+  res.json({ cancelled: true, refund });
+});
+
 app.get('/orchestrator/opportunities', async (req: any, res) => {
   const { minutes = 30 } = req.query as any;
   res.json([{ id: 'opp1', title: `Você tem ${minutes}min livres`, suggestion: 'Adiantar tarefa de alta prioridade' }]);

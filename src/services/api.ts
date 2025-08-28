@@ -97,6 +97,7 @@ export const api = {
   // Referrals
   createReferral: () => http('/referrals/create', { method: 'POST' }),
   redeemReferral: (payload: { code: string }) => http('/referrals/redeem', { method: 'POST', body: JSON.stringify(payload) }),
+  cancelSubscription: (payload: { plan: 'annual'|'monthly'|'lifetime'|'trial'; startedAt?: string; amountAnnual?: number }) => http('/billing/cancel', { method: 'POST', body: JSON.stringify(payload) }),
   getAchievements: () => http('/gamification/achievements'),
   completeTask: (taskId: string) => http('/gamification/complete-task', { method: 'POST', body: JSON.stringify({ taskId }) }),
   getQuests: () => http('/gamification/quests'),

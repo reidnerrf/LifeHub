@@ -290,6 +290,17 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
         {subscription ? (
           <div className="space-y-2 text-sm">
             <div className="text-[var(--app-text-light)]">Plano: {subscription.plan}</div>
+            <div className="flex items-center justify-between">
+              <span className="text-[var(--app-text-light)]">Início: {subscription.startedAt ? new Date(subscription.startedAt).toLocaleDateString('pt-BR') : '—'}</span>
+              <Button size="sm" variant="outline" onClick={async () => {
+                try {
+                  const res = await api.cancelSubscription({ plan: subscription.plan, startedAt: subscription.startedAt, amountAnnual: 14990 });
+                  alert(`Assinatura cancelada. Reembolso: R$ ${(res.refund/100).toFixed(2)}`);
+                  storage.remove(KEYS.subscription);
+                  setSubscription(null);
+                } catch { alert('Não foi possível cancelar agora.'); }
+              }}>Cancelar</Button>
+            </div>
             {trialInfo && (
               <div>
                 {trialInfo.expired ? (
