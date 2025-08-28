@@ -5,6 +5,7 @@ import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { EmptyState } from './ui/empty-state';
 import { api } from '../services/api';
+import { api } from '../services/api';
 
 const NotesView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -149,6 +150,34 @@ const NotesView: React.FC = () => {
             <Archive size={20} />
           </button>
         </div>
+      </div>
+
+      {/* Quick Add */}
+      <div className="flex items-center space-x-2">
+        <Input
+          type="text"
+          placeholder="Nova nota..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="flex-1 bg-[var(--app-light-gray)] border-0 rounded-2xl h-12"
+        />
+        <button
+          onClick={async () => {
+            const title = searchQuery.trim();
+            if (!title) return;
+            try {
+              const created = await api.createNote({ title, content: '' });
+              setNotes(prev => [{ id: created._id, title: created.title, content: created.content, type: 'text', tags: [], favorite: false, date: new Date().toISOString(), color: 'var(--app-blue)' }, ...prev]);
+              setSearchQuery('');
+            } catch {
+              setNotes(prev => [{ id: Date.now(), title, content: '', type: 'text', tags: [], favorite: false, date: new Date().toISOString(), color: 'var(--app-blue)' }, ...prev]);
+              setSearchQuery('');
+            }
+          }}
+          className="px-4 h-12 rounded-2xl bg-[var(--app-blue)] text-white"
+        >
+          Adicionar
+        </button>
       </div>
 
       {/* Search */}

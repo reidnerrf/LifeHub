@@ -92,6 +92,17 @@ const TasksView: React.FC = () => {
     { id: 'done', title: 'Concluído', color: 'var(--app-green)', tasks: tasks.done },
   ];
 
+  const createQuickTask = async () => {
+    const title = prompt('Nova tarefa');
+    if (!title) return;
+    try {
+      const created = await api.createTask({ title, completed: false });
+      setTasks(prev => ({ ...prev, todo: [{ id: created._id, title: created.title, description: '', priority: 'medium', dueDate: '', tags: [] }, ...prev.todo] }));
+    } catch {
+      setTasks(prev => ({ ...prev, todo: [{ id: Date.now(), title, description: '', priority: 'medium', dueDate: '', tags: [] }, ...prev.todo] }));
+    }
+  };
+
   const TaskCard = ({ task }: { task: any }) => (
     <Card className="p-4 bg-white rounded-xl border-0 shadow-sm mb-3">
       <div className="flex items-start justify-between mb-2">
@@ -174,7 +185,7 @@ const TasksView: React.FC = () => {
                     <h3 className="font-medium text-gray-900">{column.title}</h3>
                     <span className="text-sm text-[var(--app-gray)]">({column.tasks.length})</span>
                   </div>
-                  <button className="text-[var(--app-gray)]">
+                  <button className="text-[var(--app-gray)]" onClick={createQuickTask}>
                     <Plus size={16} />
                   </button>
                 </div>
