@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import Home from '../screens/Home';
 import Tasks from '../screens/Tasks';
+import Agenda from '../screens/Agenda';
 import Focus from '../screens/Focus';
 import Notes from '../screens/Notes';
 
@@ -15,31 +16,34 @@ export default function RootNavigator() {
     <NavigationContainer>
       <Tab.Navigator
         screenOptions={({ route }) => ({
-          tabBarIcon: ({ focused, color, size }) => {
-            let iconName;
+                           tabBarIcon: ({ focused, color, size }) => {
+                   let iconName;
 
-            if (route.name === 'Home') {
-              iconName = focused ? 'home' : 'home-outline';
-            } else if (route.name === 'Tasks') {
-              iconName = focused ? 'list' : 'list-outline';
-            } else if (route.name === 'Focus') {
-              iconName = focused ? 'timer' : 'timer-outline';
-            } else if (route.name === 'Notes') {
-              iconName = focused ? 'document-text' : 'document-text-outline';
-            }
+                   if (route.name === 'Home') {
+                     iconName = focused ? 'home' : 'home-outline';
+                   } else if (route.name === 'Tasks') {
+                     iconName = focused ? 'list' : 'list-outline';
+                   } else if (route.name === 'Agenda') {
+                     iconName = focused ? 'calendar' : 'calendar-outline';
+                   } else if (route.name === 'Focus') {
+                     iconName = focused ? 'timer' : 'timer-outline';
+                   } else if (route.name === 'Notes') {
+                     iconName = focused ? 'document-text' : 'document-text-outline';
+                   }
 
-            return <Ionicons name={iconName} size={size} color={color} />;
-          },
+                   return <Ionicons name={iconName} size={size} color={color} />;
+                 },
           tabBarActiveTintColor: '#007AFF',
           tabBarInactiveTintColor: 'gray',
           headerShown: false,
         })}
-      >
-        <Tab.Screen name="Home" component={Home} />
-        <Tab.Screen name="Tasks" component={Tasks} />
-        <Tab.Screen name="Focus" component={Focus} />
-        <Tab.Screen name="Notes" component={Notes} />
-      </Tab.Navigator>
+                   >
+               <Tab.Screen name="Home" component={Home} />
+               <Tab.Screen name="Tasks" component={Tasks} />
+               <Tab.Screen name="Agenda" component={Agenda} />
+               <Tab.Screen name="Focus" component={Focus} />
+               <Tab.Screen name="Notes" component={Notes} />
+             </Tab.Navigator>
     </NavigationContainer>
   );
 }

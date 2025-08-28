@@ -37,5 +37,11 @@ export const api = {
   
   // Timeline unificada
   listTodayItems: () => http('/today/items'),
+  
+  // Events
+  listEvents: () => http('/events'),
+  createEvent: (data: any) => http('/events', { method: 'POST', body: JSON.stringify(data) }),
+  updateEvent: (id: string, data: any) => http(`/events/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteEvent: (id: string) => http(`/events/${id}`, { method: 'DELETE' }),
 };
 

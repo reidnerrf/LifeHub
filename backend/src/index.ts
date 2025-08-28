@@ -67,9 +67,26 @@ const SuggestionSchema = new Schema({
 const EventSchema = new Schema({
   userId: { type: String, index: true },
   title: { type: String, required: true },
+  description: { type: String, default: '' },
   start: { type: Date, required: true },
   end: { type: Date, required: true },
   location: { type: String },
+  type: { type: String, enum: ['event', 'task', 'meeting', 'reminder'], default: 'event' },
+  priority: { type: String, enum: ['low', 'medium', 'high', 'urgent'], default: 'medium' },
+  tags: [{ type: String }],
+  isAllDay: { type: Boolean, default: false },
+  recurrence: {
+    type: { type: String, enum: ['daily', 'weekly', 'monthly', 'yearly'] },
+    interval: { type: Number, default: 1 },
+    endDate: { type: Date }
+  },
+  reminders: [{
+    type: { type: String, enum: ['push', 'email', 'sms'], default: 'push' },
+    minutesBefore: { type: Number, required: true },
+    message: { type: String }
+  }],
+  externalId: { type: String }, // Para sincronização com Google/Outlook
+  externalSource: { type: String, enum: ['google', 'outlook', 'local'], default: 'local' },
   source: { type: String, default: 'local' }
 }, { timestamps: true });
 
