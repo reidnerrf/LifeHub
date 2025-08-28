@@ -515,19 +515,55 @@ const Dashboard: React.FC = () => {
       <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
         <h3 className="font-medium text-[var(--app-text)] mb-4">Ações Rápidas</h3>
         <div className="grid grid-cols-2 gap-4">
-          <button className="flex items-center space-x-3 p-4 bg-[var(--app-blue)]15 rounded-xl hover:bg-[var(--app-blue)]20 transition-all group">
+          <button
+            onClick={async () => {
+              try {
+                const resp = await api.planWeek({});
+                console.log('Plan week:', resp);
+              } catch (e) {
+                console.error(e);
+              }
+            }}
+            className="flex items-center space-x-3 p-4 bg-[var(--app-blue)]15 rounded-xl hover:bg-[var(--app-blue)]20 transition-all group">
             <Brain size={20} style={{ color: 'var(--app-blue)' }} />
             <span className="text-sm font-medium text-[var(--app-text)] group-hover:text-[var(--app-blue)] transition-colors">Sessão Foco</span>
           </button>
-          <button className="flex items-center space-x-3 p-4 bg-[var(--app-green)]15 rounded-xl hover:bg-[var(--app-green)]20 transition-all group">
+          <button
+            onClick={async () => {
+              try {
+                const opp = await api.findOpportunities(30);
+                console.log('Opportunity:', opp);
+              } catch (e) {
+                console.error(e);
+              }
+            }}
+            className="flex items-center space-x-3 p-4 bg-[var(--app-green)]15 rounded-xl hover:bg-[var(--app-green)]20 transition-all group">
             <Heart size={20} style={{ color: 'var(--app-green)' }} />
             <span className="text-sm font-medium text-[var(--app-text)] group-hover:text-[var(--app-green)] transition-colors">Bem-estar</span>
           </button>
-          <button className="flex items-center space-x-3 p-4 bg-[var(--app-yellow)]15 rounded-xl hover:bg-[var(--app-yellow)]20 transition-all group">
+          <button
+            onClick={async () => {
+              try {
+                const score = await api.scorePlanning({ totalTasks: 10, conflictingEvents: 1, overbookedMinutes: 60, freeBlocks: [{ start: new Date().toISOString() }] });
+                console.log('Planning score:', score);
+              } catch (e) {
+                console.error(e);
+              }
+            }}
+            className="flex items-center space-x-3 p-4 bg-[var(--app-yellow)]15 rounded-xl hover:bg-[var(--app-yellow)]20 transition-all group">
             <MessageCircle size={20} style={{ color: 'var(--app-yellow)' }} />
             <span className="text-sm font-medium text-[var(--app-text)] group-hover:text-[var(--app-yellow)] transition-colors">Assistente IA</span>
           </button>
-          <button className="flex items-center space-x-3 p-4 bg-[var(--app-purple)]15 rounded-xl hover:bg-[var(--app-purple)]20 transition-all group">
+          <button
+            onClick={async () => {
+              try {
+                const windowResp = await api.nextNotificationWindow({ candidateWindows: [{ start: new Date().toISOString(), end: new Date(Date.now()+30*60000).toISOString() }] });
+                console.log('Next notification window:', windowResp);
+              } catch (e) {
+                console.error(e);
+              }
+            }}
+            className="flex items-center space-x-3 p-4 bg-[var(--app-purple)]15 rounded-xl hover:bg-[var(--app-purple)]20 transition-all group">
             <Coffee size={20} style={{ color: 'var(--app-purple)' }} />
             <span className="text-sm font-medium text-[var(--app-text)] group-hover:text-[var(--app-purple)] transition-colors">Pausa</span>
           </button>
