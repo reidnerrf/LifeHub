@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Flag, Trash2, CheckCircle2, Circle, Route } from 'lucide-react';
 
 type Milestone = {
@@ -17,10 +17,82 @@ type Roadmap = {
 
 const generateId = () => Math.random().toString(36).slice(2, 10);
 
-const initialRoadmaps: Roadmap[] = [];
+const initialRoadmaps: Roadmap[] = [
+  {
+    id: 'm1',
+    title: 'M1: Fundações + MVP',
+    description: 'Infra, backend básico, telas principais e IA heurística',
+    createdAt: new Date().toISOString(),
+    milestones: [
+      { id: 'm1-1', title: 'Infra & DevX (.gitignore, scripts, CI)', done: false },
+      { id: 'm1-2', title: 'Backend Node + Mongo: User, Task, Note, Suggestion', done: false },
+      { id: 'm1-3', title: 'Auth básica (JWT) + fallback X-User-Id', done: false },
+      { id: 'm1-4', title: 'Onboarding + Login + Import stub', done: false },
+      { id: 'm1-5', title: 'Dashboard: timeline, FAB, sugestões IA (stub)', done: false },
+      { id: 'm1-6', title: 'Tarefas: lista/Kanban CRUD, tags/prioridade (UI)', done: false },
+      { id: 'm1-7', title: 'Notas: CRUD + busca simples', done: false },
+      { id: 'm1-8', title: 'Foco: Pomodoro 25/5 + sessões do dia', done: false },
+      { id: 'm1-9', title: 'Configurações: usuário, import Google (stub), premium modal', done: false },
+      { id: 'm1-10', title: 'IA v1: /ai/suggestions, /ai/score-planning, /ai/reschedule', done: false },
+      { id: 'm1-11', title: 'Web+backend local; persistência por usuário', done: false },
+      { id: 'm1-12', title: 'Métricas: latência API, erros, uso IA', done: false }
+    ]
+  },
+  {
+    id: 'm2',
+    title: 'M2: Agenda, Hábitos, Finanças leves',
+    description: 'Agenda completa, hábitos, finanças e IA melhorada',
+    createdAt: new Date().toISOString(),
+    milestones: [
+      { id: 'm2-1', title: 'Agenda: mês/semana/dia (UI)', done: false },
+      { id: 'm2-2', title: 'Sync Google leitura (OAuth stub→real)', done: false },
+      { id: 'm2-3', title: 'Alertas “sair em 20min” (simulado)', done: false },
+      { id: 'm2-4', title: 'Hábitos: CRUD + check-ins humor/energia/sono', done: false },
+      { id: 'm2-5', title: 'Relatórios hábitos x produtividade', done: false },
+      { id: 'm2-6', title: 'Finanças: pagar/receber, lembretes, resumo mensal', done: false },
+      { id: 'm2-7', title: 'IA v2: rescheduler melhorado e justificativas', done: false },
+      { id: 'm2-8', title: 'Entregas: fluxos completos agenda/hábitos/finanças', done: false }
+    ]
+  },
+  {
+    id: 'm3',
+    title: 'M3: IA avançada + Assistente',
+    description: 'Time Orchestrator, RAG nas notas e assistente conversacional',
+    createdAt: new Date().toISOString(),
+    milestones: [
+      { id: 'm3-1', title: 'Time Orchestrator: cruzar tarefas/eventos/hábitos/energia', done: false },
+      { id: 'm3-2', title: 'Sugestão de horários ótimos + auto-rescheduler 1-toque', done: false },
+      { id: 'm3-3', title: '“Você tem 30min livres → adiantar X?”', done: false },
+      { id: 'm3-4', title: 'Aprendizado contínuo de preferências e variação semanal', done: false },
+      { id: 'm3-5', title: 'RAG nas notas: embeddings, busca semântica, links e resumos', done: false },
+      { id: 'm3-6', title: 'Assistente conversacional: criar/planejar por texto/voz', done: false },
+      { id: 'm3-7', title: 'Entregas: IA com justificativas; insights semanais', done: false }
+    ]
+  },
+  {
+    id: 'm4',
+    title: 'M4: Gamificação, i18n e polimento',
+    description: 'Gamificação, internacionalização, notificações e observabilidade',
+    createdAt: new Date().toISOString(),
+    milestones: [
+      { id: 'm4-1', title: 'Gamificação: pontos, medalhas, quests semanais', done: false },
+      { id: 'm4-2', title: 'Internacionalização e multi-idioma', done: false },
+      { id: 'm4-3', title: 'Notificações inteligentes (pontaria de horário)', done: false },
+      { id: 'm4-4', title: 'Integrações adicionais (Outlook, Trello/CSV)', done: false },
+      { id: 'm4-5', title: 'Paywall/vitalício, trial 7–14 dias, bundle anual', done: false },
+      { id: 'm4-6', title: 'Observabilidade (Sentry, OTel), privacidade local-first', done: false }
+    ]
+  }
+];
 
 const RoadmapsView: React.FC = () => {
-  const [roadmaps, setRoadmaps] = useState<Roadmap[]>(initialRoadmaps);
+  const [roadmaps, setRoadmaps] = useState<Roadmap[]>(() => {
+    try {
+      const saved = localStorage.getItem('roadmaps');
+      if (saved) return JSON.parse(saved) as Roadmap[];
+    } catch {}
+    return initialRoadmaps;
+  });
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
 
@@ -67,6 +139,13 @@ const RoadmapsView: React.FC = () => {
       return { ...r, milestones: r.milestones.filter(m => m.id !== milestoneId) };
     }));
   };
+
+  // persist
+  useEffect(() => {
+    try {
+      localStorage.setItem('roadmaps', JSON.stringify(roadmaps));
+    } catch {}
+  }, [roadmaps]);
 
   const ProgressBar: React.FC<{ value: number }> = ({ value }) => (
     <div className="w-full h-2 bg-[var(--app-light-gray)] rounded-full overflow-hidden">
