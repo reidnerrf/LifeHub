@@ -60,6 +60,11 @@ export const api = {
   ritualPreDeepWork: (payload: any) => http('/assistant/ritual/pre-deep-work', { method: 'POST', body: JSON.stringify(payload) }),
 
   // Check-ins
-  createCheckin: (data: any) => http('/checkins', { method: 'POST', body: JSON.stringify(data) })
+  createCheckin: (data: any) => http('/checkins', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Gamification
+  getStats: () => http('/gamification/stats'),
+  getAchievements: () => http('/gamification/achievements'),
+  completeTask: (taskId: string) => http('/gamification/complete-task', { method: 'POST', body: JSON.stringify({ taskId }) })
 };
 

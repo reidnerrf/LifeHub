@@ -37,6 +37,8 @@ const Dashboard: React.FC = () => {
   const [toasts, setToasts] = useState<Array<{id: string; message: string; type: 'success' | 'info' | 'error'}>>([]);
   const [showReschedule, setShowReschedule] = useState(false);
   const [rescheduleSuggestions, setRescheduleSuggestions] = useState<any[]>([]);
+  const [userStats, setUserStats] = useState<any>(null);
+  const [achievements, setAchievements] = useState<any[]>([]);
 
   const showToast = (message: string, type: 'success' | 'info' | 'error' = 'info') => {
     const id = Math.random().toString(36).slice(2);
@@ -62,6 +64,23 @@ const Dashboard: React.FC = () => {
       showToast('Erro ao buscar reagendamentos', 'error');
     }
   };
+
+  // Load gamification data
+  useEffect(() => {
+    const loadGamification = async () => {
+      try {
+        const [stats, achievementsList] = await Promise.all([
+          api.getStats(),
+          api.getAchievements()
+        ]);
+        setUserStats(stats);
+        setAchievements(achievementsList);
+      } catch (e) {
+        console.error('Error loading gamification data:', e);
+      }
+    };
+    loadGamification();
+  }, []);
 
   // Sample data for charts
   const productivityData = [
@@ -538,6 +557,40 @@ const Dashboard: React.FC = () => {
           ))}
         </div>
       </Card>
+
+      {/* Gamification Stats */}
+      {userStats && (
+        <Card className="p-6 bg-gradient-to-r from-[var(--app-purple)] to-[var(--app-blue)] rounded-2xl border-0 shadow-sm text-white">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="font-medium text-white">Nível {userStats.level}</h3>
+              <p className="text-white/80 text-sm">Progresso para o próximo nível</p>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-bold">{userStats.points}</div>
+              <div className="text-sm text-white/80">pontos</div>
+            </div>
+          </div>
+          <div className="mb-4">
+            <div className="flex justify-between text-sm mb-1">
+              <span>Nível {userStats.level}</span>
+              <span>Nível {userStats.level + 1}</span>
+            </div>
+            <div className="w-full bg-white/20 rounded-full h-2">
+              <div 
+                className="bg-white h-2 rounded-full transition-all"
+                style={{ width: `${((userStats.points % 100) / 100) * 100}%` }}
+              />
+            </div>
+          </div>
+          {achievements.length > 0 && (
+            <div className="flex items-center space-x-2">
+              <Trophy size={16} className="text-[var(--app-yellow)]" />
+              <span className="text-sm">{achievements.length} conquistas desbloqueadas</span>
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Quick Actions */}
       <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">

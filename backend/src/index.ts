@@ -80,6 +80,24 @@ const TransactionSchema = new Schema({
   description: { type: String }
 }, { timestamps: true });
 
+const UserStatsSchema = new Schema({
+  userId: { type: String, index: true },
+  points: { type: Number, default: 0 },
+  level: { type: Number, default: 1 },
+  streakDays: { type: Number, default: 0 },
+  achievements: [{ type: String }],
+  lastActivity: { type: Date, default: Date.now }
+}, { timestamps: true });
+
+const AchievementSchema = new Schema({
+  userId: { type: String, index: true },
+  type: { type: String, required: true }, // 'task_completion', 'habit_streak', 'focus_session', etc.
+  title: { type: String, required: true },
+  description: { type: String, required: true },
+  points: { type: Number, required: true },
+  unlockedAt: { type: Date, default: Date.now }
+}, { timestamps: true });
+
 const User = model('User', UserSchema);
 const Task = model('Task', TaskSchema);
 const Note = model('Note', NoteSchema);
@@ -88,6 +106,8 @@ const Event = model('Event', EventSchema);
 const Habit = model('Habit', HabitSchema);
 const Checkin = model('Checkin', CheckinSchema);
 const Transaction = model('Transaction', TransactionSchema);
+const UserStats = model('UserStats', UserStatsSchema);
+const Achievement = model('Achievement', AchievementSchema);
 
 // Auth
 const authMiddleware = (req: any, res: any, next: any) => {
@@ -200,8 +220,81 @@ app.get('/checkins', async (req: any, res) => {
 app.post('/checkins', async (req: any, res) => {
   const userId = String(req.userId);
   const c = await Checkin.create({ ...req.body, userId });
+  
+  // Award points for daily check-in
+  await awardPoints(userId, 10, 'Daily check-in completed');
+  
   res.status(201).json(c);
 });
+
+// Gamification functions
+async function awardPoints(userId: string, points: number, reason: string) {
+  let stats = await UserStats.findOne({ userId });
+  if (!stats) {
+    stats = await UserStats.create({ userId, points: 0, level: 1, streakDays: 0 });
+  }
+  
+  stats.points += points;
+  stats.lastActivity = new Date();
+  
+  // Level up logic
+  const newLevel = Math.floor(stats.points / 100) + 1;
+  if (newLevel > stats.level) {
+    stats.level = newLevel;
+    await Achievement.create({
+      userId,
+      type: 'level_up',
+      title: `Nível ${newLevel}`,
+      description: `Parabéns! Você alcançou o nível ${newLevel}`,
+      points: 50
+    });
+  }
+  
+  await stats.save();
+  return stats;
+}
+
+async function checkAchievements(userId: string) {
+  const stats = await UserStats.findOne({ userId });
+  if (!stats) return;
+  
+  // Check for various achievements
+  const achievements = [];
+  
+  // Task completion achievements
+  const completedTasks = await Task.countDocuments({ userId, completed: true });
+  if (completedTasks >= 10 && !stats.achievements.includes('task_master_10')) {
+    achievements.push({
+      type: 'task_completion',
+      title: 'Mestre das Tarefas',
+      description: 'Completou 10 tarefas',
+      points: 25
+    });
+    stats.achievements.push('task_master_10');
+  }
+  
+  // Habit streak achievements
+  if (stats.streakDays >= 7 && !stats.achievements.includes('habit_streak_7')) {
+    achievements.push({
+      type: 'habit_streak',
+      title: 'Semana Consistente',
+      description: 'Manteve hábitos por 7 dias seguidos',
+      points: 50
+    });
+    stats.achievements.push('habit_streak_7');
+  }
+  
+  // Create achievements
+  for (const achievement of achievements) {
+    await Achievement.create({ userId, ...achievement });
+  }
+  
+  if (achievements.length > 0) {
+    await stats.save();
+  }
+  
+  return achievements;
+}
 
 // AI suggestions (stub)
 app.get('/ai/suggestions', (_req, res) => {
@@ -336,11 +429,108 @@ app.get('/orchestrator/opportunities', async (req: any, res) => {
   res.json([{ id: 'opp1', title: `Você tem ${minutes}min livres`, suggestion: 'Adiantar tarefa de alta prioridade' }]);
 });
 
-// Notifications targeting (stub)
-app.post('/notifications/next-window', (req, res) => {
+// Enhanced Notifications targeting with smart timing
+app.post('/notifications/next-window', async (req: any, res) => {
   const { candidateWindows = [] } = req.body || {};
-  const best = candidateWindows[0] || { start: new Date(), end: new Date(Date.now() + 30 * 60000) };
-  res.json({ window: best, score: 0.7 });
+  const userId = String(req.userId);
+  
+  // Get user's recent activity patterns
+  const recentCheckins = await Checkin.find({ userId })
+    .sort({ createdAt: -1 })
+    .limit(7);
+  
+  const recentTasks = await Task.find({ userId })
+    .sort({ createdAt: -1 })
+    .limit(10);
+  
+  // Calculate optimal notification timing
+  const now = new Date();
+  const currentHour = now.getHours();
+  
+  // Base scoring on time of day preferences
+  let bestWindow = candidateWindows[0] || { start: now, end: new Date(now.getTime() + 30 * 60000) };
+  let bestScore = 0;
+  
+  for (const window of candidateWindows) {
+    let score = 0;
+    const windowStart = new Date(window.start);
+    const windowHour = windowStart.getHours();
+    
+    // Time of day scoring (avoid early morning and late night)
+    if (windowHour >= 8 && windowHour <= 10) score += 30; // Morning peak
+    else if (windowHour >= 14 && windowHour <= 16) score += 25; // Afternoon peak
+    else if (windowHour >= 19 && windowHour <= 21) score += 20; // Evening
+    else if (windowHour >= 6 && windowHour <= 22) score += 10; // Acceptable hours
+    else score -= 20; // Avoid late night/early morning
+    
+    // Energy-based scoring
+    if (recentCheckins.length > 0) {
+      const avgEnergy = recentCheckins.reduce((sum: number, c: any) => sum + (c.energy || 3), 0) / recentCheckins.length;
+      if (avgEnergy >= 4) score += 15; // High energy = good time for notifications
+      else if (avgEnergy <= 2) score -= 10; // Low energy = avoid notifications
+    }
+    
+    // Task completion pattern
+    const completedToday = recentTasks.filter((t: any) => t.completed && 
+      new Date(t.createdAt).toDateString() === now.toDateString()).length;
+    if (completedToday >= 3) score += 10; // User is productive today
+    else if (completedToday === 0) score -= 5; // User hasn't completed anything today
+    
+      // Avoid notification fatigue (don't notify too frequently)
+  const userStats = await UserStats.findOne({ userId });
+  const timeSinceLastActivity = userStats?.lastActivity ? 
+    (now.getTime() - new Date(userStats.lastActivity).getTime()) / (1000 * 60) : 0;
+  if (timeSinceLastActivity < 30) score -= 20; // Too recent
+    
+    if (score > bestScore) {
+      bestScore = score;
+      bestWindow = window;
+    }
+  }
+  
+  // Normalize score to 0-1 range
+  const normalizedScore = Math.max(0, Math.min(1, bestScore / 100));
+  
+  res.json({ 
+    window: bestWindow, 
+    score: normalizedScore,
+    reason: bestScore >= 50 ? 'Momento ideal baseado em seus padrões' :
+            bestScore >= 30 ? 'Bom momento para notificação' :
+            'Momento aceitável'
+  });
+});
+
+// Gamification endpoints
+app.get('/gamification/stats', async (req: any, res) => {
+  const userId = String(req.userId);
+  let stats = await UserStats.findOne({ userId });
+  if (!stats) {
+    stats = await UserStats.create({ userId, points: 0, level: 1, streakDays: 0 });
+  }
+  res.json(stats);
+});
+
+app.get('/gamification/achievements', async (req: any, res) => {
+  const userId = String(req.userId);
+  const achievements = await Achievement.find({ userId }).sort({ unlockedAt: -1 });
+  res.json(achievements);
+});
+
+app.post('/gamification/complete-task', async (req: any, res) => {
+  const userId = String(req.userId);
+  const { taskId } = req.body;
+  
+  // Award points for task completion
+  await awardPoints(userId, 15, 'Task completed');
+  
+  // Check for new achievements
+  const newAchievements = await checkAchievements(userId);
+  
+  res.json({ 
+    pointsAwarded: 15, 
+    newAchievements: newAchievements || [],
+    message: 'Tarefa completada! +15 pontos'
+  });
 });
 
 // RAG stubs on notes
