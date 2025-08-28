@@ -34,6 +34,13 @@ import { api } from '../services/api';
 const Dashboard: React.FC = () => {
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
   const [showPremium, setShowPremium] = useState(false);
+  const [toasts, setToasts] = useState<Array<{id: string; message: string; type: 'success' | 'info' | 'error'}>>([]);
+
+  const showToast = (message: string, type: 'success' | 'info' | 'error' = 'info') => {
+    const id = Math.random().toString(36).slice(2);
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+  };
 
   // Sample data for charts
   const productivityData = [
@@ -519,9 +526,9 @@ const Dashboard: React.FC = () => {
             onClick={async () => {
               try {
                 const resp = await api.planWeek({});
-                console.log('Plan week:', resp);
+                showToast(`Plano semanal gerado: ${resp.message}`, 'success');
               } catch (e) {
-                console.error(e);
+                showToast('Erro ao planejar semana', 'error');
               }
             }}
             className="flex items-center space-x-3 p-4 bg-[var(--app-blue)]15 rounded-xl hover:bg-[var(--app-blue)]20 transition-all group">
@@ -532,9 +539,13 @@ const Dashboard: React.FC = () => {
             onClick={async () => {
               try {
                 const opp = await api.findOpportunities(30);
-                console.log('Opportunity:', opp);
+                if (opp && opp.length > 0) {
+                  showToast(`Oportunidade: ${opp[0].title}`, 'info');
+                } else {
+                  showToast('Nenhuma oportunidade encontrada', 'info');
+                }
               } catch (e) {
-                console.error(e);
+                showToast('Erro ao buscar oportunidades', 'error');
               }
             }}
             className="flex items-center space-x-3 p-4 bg-[var(--app-green)]15 rounded-xl hover:bg-[var(--app-green)]20 transition-all group">
@@ -545,9 +556,9 @@ const Dashboard: React.FC = () => {
             onClick={async () => {
               try {
                 const score = await api.scorePlanning({ totalTasks: 10, conflictingEvents: 1, overbookedMinutes: 60, freeBlocks: [{ start: new Date().toISOString() }] });
-                console.log('Planning score:', score);
+                showToast(`Score de planejamento: ${score.score}/100`, 'info');
               } catch (e) {
-                console.error(e);
+                showToast('Erro ao calcular score', 'error');
               }
             }}
             className="flex items-center space-x-3 p-4 bg-[var(--app-yellow)]15 rounded-xl hover:bg-[var(--app-yellow)]20 transition-all group">
@@ -558,9 +569,9 @@ const Dashboard: React.FC = () => {
             onClick={async () => {
               try {
                 const windowResp = await api.nextNotificationWindow({ candidateWindows: [{ start: new Date().toISOString(), end: new Date(Date.now()+30*60000).toISOString() }] });
-                console.log('Next notification window:', windowResp);
+                showToast(`Próxima notificação: score ${Math.round(windowResp.score * 100)}%`, 'info');
               } catch (e) {
-                console.error(e);
+                showToast('Erro ao calcular janela', 'error');
               }
             }}
             className="flex items-center space-x-3 p-4 bg-[var(--app-purple)]15 rounded-xl hover:bg-[var(--app-purple)]20 transition-all group">
@@ -570,6 +581,22 @@ const Dashboard: React.FC = () => {
         </div>
       </Card>
       <PremiumModal open={showPremium} onClose={() => setShowPremium(false)} />
+
+      {/* Toast notifications */}
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        {toasts.map(toast => (
+          <div
+            key={toast.id}
+            className={`px-4 py-3 rounded-xl shadow-lg max-w-sm transition-all ${
+              toast.type === 'success' ? 'bg-[var(--app-green)] text-white' :
+              toast.type === 'error' ? 'bg-[var(--app-red)] text-white' :
+              'bg-[var(--app-blue)] text-white'
+            }`}
+          >
+            {toast.message}
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
