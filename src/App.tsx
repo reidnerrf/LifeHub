@@ -63,6 +63,13 @@ export default function App() {
   // Finalize OAuth if code present in URL hash
   useEffect(() => {
     const hash = window.location.hash || '';
+    const actionMatch = hash.match(/action=([^&]+)/);
+    if (actionMatch) {
+      const action = decodeURIComponent(actionMatch[1]);
+      if (action === 'start_focus') setActiveTab('focus');
+      if (action === 'add_task') { setActiveTab('tasks'); setShowQuickAdd(true); }
+      if (action === 'next_event') setActiveTab('calendar');
+    }
     const m = hash.match(/google_code=([^&]+)/);
     if (m) {
       const code = decodeURIComponent(m[1]);

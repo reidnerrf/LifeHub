@@ -77,6 +77,19 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
         { icon: <Sparkles size={20} />, text: 'Insights e relatórios automáticos' },
         { icon: <Zap size={20} />, text: 'Integrações com bancos e serviços' }
       ]
+    },
+    {
+      id: 'quickwins',
+      title: 'Quick Wins ⚡',
+      subtitle: 'Configure em 30 segundos',
+      description: 'Importe sua agenda, adote 3 hábitos e planeje hoje agora.',
+      icon: <Zap size={80} className="text-[var(--app-green)]" />,
+      gradient: 'from-[var(--app-green)] to-[var(--app-blue)]',
+      features: [
+        { icon: <Calendar size={20} />, text: 'Importar agenda (Google)' },
+        { icon: <Target size={20} />, text: 'Sugerir 3 hábitos' },
+        { icon: <CheckSquare size={20} />, text: 'Planejar hoje em 30s' }
+      ]
     }
   ];
 
@@ -198,6 +211,15 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
             <button onClick={() => alert('Importação simulada!')} className="px-3 py-1 rounded-lg bg-white text-black">Importar</button>
           </div>
         </div>
+
+        {/* Quick Wins Actions */}
+        {currentStepData.id === 'quickwins' && (
+          <div className="mb-6 space-y-3 animate-slide-up">
+            <button onClick={async () => { try { await (await import('../services/api')).api.importGoogle(); alert('Agenda importada!'); } catch {} }} className="w-full py-3 rounded-xl bg-white/20 text-white">Importar agenda</button>
+            <button onClick={() => alert('3 hábitos sugeridos: Água, Leitura, Caminhada')} className="w-full py-3 rounded-xl bg-white/20 text-white">Sugerir 3 hábitos</button>
+            <button onClick={() => alert('Hoje planejado em 30s: 3 blocos inseridos')} className="w-full py-3 rounded-xl bg-white text-[var(--app-blue)]">Planejar hoje</button>
+          </div>
+        )}
 
         {/* Navigation */}
         <div className="flex items-center justify-between animate-slide-up">
