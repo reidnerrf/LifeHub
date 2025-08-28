@@ -218,6 +218,16 @@ app.delete('/suggestions/:id', async (req, res) => {
     await Suggestion.findByIdAndDelete(req.params.id);
     res.status(204).end();
 });
+// Check-ins CRUD
+app.get('/checkins', async (req, res) => {
+    const userId = String(req.userId);
+    res.json(await Checkin.find({ userId }).sort({ createdAt: -1 }));
+});
+app.post('/checkins', async (req, res) => {
+    const userId = String(req.userId);
+    const c = await Checkin.create({ ...req.body, userId });
+    res.status(201).json(c);
+});
 // AI suggestions (stub)
 app.get('/ai/suggestions', (_req, res) => {
     res.json([

@@ -192,6 +192,17 @@ app.delete('/suggestions/:id', async (req, res) => {
   res.status(204).end();
 });
 
+// Check-ins CRUD
+app.get('/checkins', async (req: any, res) => {
+  const userId = String(req.userId);
+  res.json(await Checkin.find({ userId }).sort({ createdAt: -1 }));
+});
+app.post('/checkins', async (req: any, res) => {
+  const userId = String(req.userId);
+  const c = await Checkin.create({ ...req.body, userId });
+  res.status(201).json(c);
+});
+
 // AI suggestions (stub)
 app.get('/ai/suggestions', (_req, res) => {
   res.json([

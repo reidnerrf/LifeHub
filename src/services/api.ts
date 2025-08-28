@@ -57,6 +57,9 @@ export const api = {
 
   // Assistant
   planWeek: (payload: any) => http('/assistant/plan-week', { method: 'POST', body: JSON.stringify(payload) }),
-  ritualPreDeepWork: (payload: any) => http('/assistant/ritual/pre-deep-work', { method: 'POST', body: JSON.stringify(payload) })
+  ritualPreDeepWork: (payload: any) => http('/assistant/ritual/pre-deep-work', { method: 'POST', body: JSON.stringify(payload) }),
+
+  // Check-ins
+  createCheckin: (data: any) => http('/checkins', { method: 'POST', body: JSON.stringify(data) })
 };
 

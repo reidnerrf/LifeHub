@@ -35,11 +35,32 @@ const Dashboard: React.FC = () => {
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
   const [showPremium, setShowPremium] = useState(false);
   const [toasts, setToasts] = useState<Array<{id: string; message: string; type: 'success' | 'info' | 'error'}>>([]);
+  const [showReschedule, setShowReschedule] = useState(false);
+  const [rescheduleSuggestions, setRescheduleSuggestions] = useState<any[]>([]);
 
   const showToast = (message: string, type: 'success' | 'info' | 'error' = 'info') => {
     const id = Math.random().toString(36).slice(2);
     setToasts(prev => [...prev, { id, message, type }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+  };
+
+  const triggerReschedule = async () => {
+    try {
+      const suggestions = await api.orchestrateReschedule({
+        impactedTasks: [
+          { id: 'task1', title: 'Reunião cancelada', durationMin: 60 },
+          { id: 'task2', title: 'Relatório urgente', durationMin: 30 }
+        ],
+        nextBlocks: [
+          { start: new Date(Date.now() + 30 * 60000).toISOString() },
+          { start: new Date(Date.now() + 90 * 60000).toISOString() }
+        ]
+      });
+      setRescheduleSuggestions(suggestions.suggestions || []);
+      setShowReschedule(true);
+    } catch (e) {
+      showToast('Erro ao buscar reagendamentos', 'error');
+    }
   };
 
   // Sample data for charts
@@ -553,14 +574,7 @@ const Dashboard: React.FC = () => {
             <span className="text-sm font-medium text-[var(--app-text)] group-hover:text-[var(--app-green)] transition-colors">Bem-estar</span>
           </button>
           <button
-            onClick={async () => {
-              try {
-                const score = await api.scorePlanning({ totalTasks: 10, conflictingEvents: 1, overbookedMinutes: 60, freeBlocks: [{ start: new Date().toISOString() }] });
-                showToast(`Score de planejamento: ${score.score}/100`, 'info');
-              } catch (e) {
-                showToast('Erro ao calcular score', 'error');
-              }
-            }}
+            onClick={triggerReschedule}
             className="flex items-center space-x-3 p-4 bg-[var(--app-yellow)]15 rounded-xl hover:bg-[var(--app-yellow)]20 transition-all group">
             <MessageCircle size={20} style={{ color: 'var(--app-yellow)' }} />
             <span className="text-sm font-medium text-[var(--app-text)] group-hover:text-[var(--app-yellow)] transition-colors">Assistente IA</span>
@@ -581,6 +595,44 @@ const Dashboard: React.FC = () => {
         </div>
       </Card>
       <PremiumModal open={showPremium} onClose={() => setShowPremium(false)} />
+
+      {/* Reschedule Modal */}
+      {showReschedule && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md m-4 p-6 rounded-2xl bg-[var(--app-card)] border border-[var(--app-light-gray)]">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-[var(--app-text)]">Reagendamento Sugerido</h3>
+              <button
+                onClick={() => setShowReschedule(false)}
+                className="p-2 rounded-lg hover:bg-[var(--app-light-gray)]"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-3">
+              {rescheduleSuggestions.map((suggestion, idx) => (
+                <div key={idx} className="p-3 border border-[var(--app-light-gray)] rounded-xl">
+                  <div className="text-sm text-[var(--app-text)] mb-1">
+                    {suggestion.reason}
+                  </div>
+                  <div className="text-xs text-[var(--app-text-light)]">
+                    {new Date(suggestion.suggestedStart).toLocaleTimeString()} - {new Date(suggestion.suggestedEnd).toLocaleTimeString()}
+                  </div>
+                  <button
+                    onClick={() => {
+                      showToast('Reagendamento aplicado!', 'success');
+                      setShowReschedule(false);
+                    }}
+                    className="mt-2 w-full py-2 bg-[var(--app-blue)] text-white rounded-lg text-sm"
+                  >
+                    Aplicar 1‑toque
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast notifications */}
       <div className="fixed top-4 right-4 z-50 space-y-2">
