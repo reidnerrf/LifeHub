@@ -6,7 +6,8 @@ import {
   FlatList,
   TouchableOpacity,
   Alert,
-  Dimensions
+  Dimensions,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeProvider';
@@ -17,6 +18,10 @@ import TaskFilters from '../components/TaskFilters';
 import KanbanView from '../components/KanbanView';
 import CalendarView from '../components/CalendarView';
 import CreateTaskModal from '../components/CreateTaskModal';
+import { DraggableTaskItem } from '../components/DraggableTaskItem';
+import { TaskTemplatesModal } from '../components/TaskTemplatesModal';
+import { TaskDependenciesModal } from '../components/TaskDependenciesModal';
+import { ProductivityReportsModal } from '../components/ProductivityReportsModal';
 
 const { width } = Dimensions.get('window');
 
@@ -30,13 +35,25 @@ export default function Tasks() {
     getFilteredTasks,
     addTask,
     updateTask,
-    deleteTask
+    deleteTask,
+    createTaskFromTemplate,
+    getProductivityStats,
+    getOverdueTasks,
+    getTasksDueSoon,
+    isOffline,
+    syncOfflineChanges,
+    getPendingSync,
+    activeTimeEntry,
   } = useTasks();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false);
+  const [showDependenciesModal, setShowDependenciesModal] = useState(false);
+  const [showReportsModal, setShowReportsModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [selectedTaskForDependencies, setSelectedTaskForDependencies] = useState<Task | null>(null);
 
   useEffect(() => {
     loadTasks();
@@ -59,6 +76,14 @@ export default function Tasks() {
         estimatedDuration: task.estimatedDuration,
         actualDuration: task.actualDuration,
         status: task.status || 'pending',
+        dependencies: task.dependencies || [],
+        timeEntries: task.timeEntries || [],
+        isShared: task.isShared || false,
+        sharedWith: task.sharedWith || [],
+        externalCalendarId: task.externalCalendarId,
+        externalEventId: task.externalEventId,
+        notifications: task.notifications || { enabled: true, reminderTime: 30 },
+        aiSuggestions: task.aiSuggestions || {},
         createdAt: new Date(task.createdAt),
         updatedAt: new Date(task.updatedAt),
       }));
@@ -85,6 +110,12 @@ export default function Tasks() {
         dueDate: created.dueDate ? new Date(created.dueDate) : undefined,
         estimatedDuration: created.estimatedDuration,
         status: 'pending',
+        dependencies: [],
+        timeEntries: [],
+        isShared: false,
+        sharedWith: [],
+        notifications: { enabled: true, reminderTime: 30 },
+        aiSuggestions: {},
         createdAt: new Date(created.createdAt),
         updatedAt: new Date(created.updatedAt),
       };
@@ -117,6 +148,24 @@ export default function Tasks() {
     setShowCreateModal(true);
   };
 
+  const handleTemplateSelect = (template: any) => {
+    createTaskFromTemplate(template.id);
+    Alert.alert('Sucesso', 'Tarefa criada a partir do template!');
+  };
+
+  const handleSyncOffline = async () => {
+    try {
+      const success = await syncOfflineChanges();
+      if (success) {
+        Alert.alert('Sucesso', 'Alterações sincronizadas com sucesso!');
+      } else {
+        Alert.alert('Erro', 'Falha na sincronização. Tente novamente.');
+      }
+    } catch (error) {
+      Alert.alert('Erro', 'Erro durante a sincronização');
+    }
+  };
+
   const getViewIcon = (viewType: TaskView) => {
     switch (viewType) {
       case 'list': return 'list';
@@ -136,11 +185,19 @@ export default function Tasks() {
   };
 
   const filteredTasks = getFilteredTasks();
+  const stats = getProductivityStats();
+  const overdueTasks = getOverdueTasks();
+  const tasksDueSoon = getTasksDueSoon(24); // próximas 24 horas
+  const pendingSync = getPendingSync();
 
   const renderTaskItem = ({ item }: { item: Task }) => (
-    <TaskItem
+    <DraggableTaskItem
       task={item}
       onPress={() => handleTaskPress(item)}
+      onLongPress={() => {
+        setSelectedTaskForDependencies(item);
+        setShowDependenciesModal(true);
+      }}
     />
   );
 
@@ -171,18 +228,104 @@ export default function Tasks() {
     </View>
   );
 
+  const renderQuickActions = () => (
+    <ScrollView 
+      horizontal 
+      showsHorizontalScrollIndicator={false}
+      style={styles.quickActionsContainer}
+      contentContainerStyle={styles.quickActionsContent}
+    >
+      <TouchableOpacity
+        style={[styles.quickActionButton, { backgroundColor: t.primary }]}
+        onPress={() => setShowTemplatesModal(true)}
+      >
+        <Ionicons name="copy-outline" size={20} color="#fff" />
+        <Text style={[styles.quickActionText, { color: '#fff' }]}>Templates</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.quickActionButton, { backgroundColor: t.success }]}
+        onPress={() => setShowReportsModal(true)}
+      >
+        <Ionicons name="analytics-outline" size={20} color="#fff" />
+        <Text style={[styles.quickActionText, { color: '#fff' }]}>Relatórios</Text>
+      </TouchableOpacity>
+
+      {isOffline && (
+        <TouchableOpacity
+          style={[styles.quickActionButton, { backgroundColor: t.warning }]}
+          onPress={handleSyncOffline}
+        >
+          <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
+          <Text style={[styles.quickActionText, { color: '#fff' }]}>
+            Sincronizar ({pendingSync.tasks.length + pendingSync.timeEntries.length})
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {activeTimeEntry && (
+        <TouchableOpacity
+          style={[styles.quickActionButton, { backgroundColor: '#ff4757' }]}
+        >
+          <Ionicons name="timer" size={20} color="#fff" />
+          <Text style={[styles.quickActionText, { color: '#fff' }]}>Cronômetro Ativo</Text>
+        </TouchableOpacity>
+      )}
+    </ScrollView>
+  );
+
+  const renderAlerts = () => {
+    const alerts = [];
+    
+    if (overdueTasks.length > 0) {
+      alerts.push(
+        <View key="overdue" style={[styles.alertCard, { backgroundColor: '#ffebee' }]}>
+          <Ionicons name="warning-outline" size={20} color="#d32f2f" />
+          <Text style={[styles.alertText, { color: '#d32f2f' }]}>
+            {overdueTasks.length} tarefa{overdueTasks.length > 1 ? 's' : ''} atrasada{overdueTasks.length > 1 ? 's' : ''}
+          </Text>
+        </View>
+      );
+    }
+
+    if (tasksDueSoon.length > 0) {
+      alerts.push(
+        <View key="dueSoon" style={[styles.alertCard, { backgroundColor: '#fff3e0' }]}>
+          <Ionicons name="time-outline" size={20} color="#f57c00" />
+          <Text style={[styles.alertText, { color: '#f57c00' }]}>
+            {tasksDueSoon.length} tarefa{tasksDueSoon.length > 1 ? 's' : ''} vence{m em breve
+          </Text>
+        </View>
+      );
+    }
+
+    return alerts.length > 0 ? (
+      <View style={styles.alertsContainer}>
+        {alerts}
+      </View>
+    ) : null;
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: t.background }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: t.card }]}>
         <View style={styles.headerTop}>
           <Text style={[styles.title, { color: t.text }]}>Tarefas & Planner</Text>
-          <TouchableOpacity
-            onPress={() => setShowCreateModal(true)}
-            style={[styles.addButton, { backgroundColor: t.primary }]}
-          >
-            <Ionicons name="add" size={24} color="#fff" />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              onPress={() => setShowTemplatesModal(true)}
+              style={[styles.headerActionButton, { backgroundColor: t.background }]}
+            >
+              <Ionicons name="copy-outline" size={20} color={t.text} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowCreateModal(true)}
+              style={[styles.addButton, { backgroundColor: t.primary }]}
+            >
+              <Ionicons name="add" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* View Selector */}
@@ -215,20 +358,20 @@ export default function Tasks() {
         {/* Estatísticas */}
         <View style={styles.stats}>
           <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: t.text }]}>{tasks.length}</Text>
+            <Text style={[styles.statNumber, { color: t.text }]}>{stats.totalTasks}</Text>
             <Text style={[styles.statLabel, { color: t.textLight }]}>Total</Text>
           </View>
           <View style={styles.statItem}>
             <Text style={[styles.statNumber, { color: t.success }]}>
-              {tasks.filter(t => t.status === 'completed').length}
+              {stats.completedTasks}
             </Text>
             <Text style={[styles.statLabel, { color: t.textLight }]}>Concluídas</Text>
           </View>
           <View style={styles.statItem}>
             <Text style={[styles.statNumber, { color: '#FF3B30' }]}>
-              {tasks.filter(t => t.priority === 'urgent').length}
+              {overdueTasks.length}
             </Text>
-            <Text style={[styles.statLabel, { color: t.textLight }]}>Urgentes</Text>
+            <Text style={[styles.statLabel, { color: t.textLight }]}>Atrasadas</Text>
           </View>
           <View style={styles.statItem}>
             <Text style={[styles.statNumber, { color: t.warning }]}>
@@ -237,6 +380,12 @@ export default function Tasks() {
             <Text style={[styles.statLabel, { color: t.textLight }]}>Em Progresso</Text>
           </View>
         </View>
+
+        {/* Ações Rápidas */}
+        {renderQuickActions()}
+
+        {/* Alertas */}
+        {renderAlerts()}
       </View>
 
       {/* Filtros */}
@@ -279,7 +428,7 @@ export default function Tasks() {
         )}
       </View>
 
-      {/* Modal de criação/edição */}
+      {/* Modais */}
       <CreateTaskModal
         visible={showCreateModal}
         onClose={() => {
@@ -287,6 +436,26 @@ export default function Tasks() {
           setEditingTask(null);
         }}
         initialData={editingTask || undefined}
+      />
+
+      <TaskTemplatesModal
+        visible={showTemplatesModal}
+        onClose={() => setShowTemplatesModal(false)}
+        onSelectTemplate={handleTemplateSelect}
+      />
+
+      <TaskDependenciesModal
+        visible={showDependenciesModal}
+        onClose={() => {
+          setShowDependenciesModal(false);
+          setSelectedTaskForDependencies(null);
+        }}
+        taskId={selectedTaskForDependencies?.id || ''}
+      />
+
+      <ProductivityReportsModal
+        visible={showReportsModal}
+        onClose={() => setShowReportsModal(false)}
       />
     </View>
   );
@@ -310,6 +479,17 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  headerActionButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   addButton: {
     width: 44,
@@ -340,6 +520,7 @@ const styles = StyleSheet.create({
   stats: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    marginBottom: 16,
   },
   statItem: {
     alignItems: 'center',
@@ -351,6 +532,40 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 12,
     marginTop: 2,
+  },
+  quickActionsContainer: {
+    marginBottom: 12,
+  },
+  quickActionsContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  quickActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  quickActionText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  alertsContainer: {
+    gap: 8,
+  },
+  alertCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 8,
+  },
+  alertText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   content: {
     flex: 1,
