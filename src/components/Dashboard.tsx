@@ -702,6 +702,14 @@ const Dashboard: React.FC = () => {
           </button>
           <button
             onClick={async () => {
+              try { const s = await api.bestSlot({ durationMin: 45 }); showToast(`Melhor horário: ${new Date(s.suggestedStart).toLocaleString('pt-BR')} (${s.reason})`, 'info'); } catch { showToast('Erro ao sugerir horário', 'error'); }
+            }}
+            className="flex items-center space-x-3 p-4 bg-[var(--app-purple)]15 rounded-xl hover:bg-[var(--app-purple)]20 transition-all group">
+            <Zap size={20} style={{ color: 'var(--app-purple)' }} />
+            <span className="text-sm font-medium text-[var(--app-text)] group-hover:text-[var(--app-purple)] transition-colors">Melhor horário</span>
+          </button>
+          <button
+            onClick={async () => {
               try {
                 const windowResp = await api.nextNotificationWindow({ candidateWindows: [{ start: new Date().toISOString(), end: new Date(Date.now()+30*60000).toISOString() }] });
                 showToast(`Próxima notificação: score ${Math.round(windowResp.score * 100)}%`, 'info');
@@ -716,6 +724,17 @@ const Dashboard: React.FC = () => {
         </div>
       </Card>
       <PremiumModal open={showPremium} onClose={() => setShowPremium(false)} />
+
+      {/* Inbox universal (stub) */}
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <h3 className="font-medium text-[var(--app-text)] mb-3">Inbox</h3>
+        <div className="flex items-center space-x-2">
+          <input placeholder="Capture algo rápido..." className="flex-1 p-3 rounded-xl bg-[var(--app-light-gray)] border-0" />
+          <button className="px-3 py-2 rounded-xl bg-[var(--app-blue)] text-white text-sm">Adicionar</button>
+          <button className="px-3 py-2 rounded-xl bg-[var(--app-light-gray)] text-sm">Voz</button>
+          <button className="px-3 py-2 rounded-xl bg-[var(--app-light-gray)] text-sm">WhatsApp</button>
+        </div>
+      </Card>
 
       {/* Reschedule Modal */}
       {showReschedule && (

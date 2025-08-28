@@ -39,6 +39,7 @@ export const api = {
   scorePlanning: (payload: any) => http('/ai/score-planning', { method: 'POST', body: JSON.stringify(payload) }),
   reschedule: (payload: any) => http('/ai/reschedule', { method: 'POST', body: JSON.stringify(payload) }),
   predictDuration: (payload: any) => http('/ai/predict-duration', { method: 'POST', body: JSON.stringify(payload) }),
+  bestSlot: (payload: any) => http('/ai/best-slot', { method: 'POST', body: JSON.stringify(payload) }),
 
   // Integrations
   importGoogle: () => http('/integrations/google/import', { method: 'POST' }),

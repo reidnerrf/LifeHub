@@ -724,6 +724,15 @@ app.post('/referrals/redeem', (_req, res) => res.json({ ok: true, bonusDays: 30 
 // Weekly summary stub
 app.post('/reports/weekly/dispatch', (_req, res) => res.json({ sent: true }));
 
+// Best day/time for scheduling (stub)
+app.post('/ai/best-slot', async (req: any, res) => {
+  const { durationMin = 30 } = req.body || {};
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1, 10, 0, 0);
+  const end = new Date(start.getTime() + durationMin * 60000);
+  res.json({ suggestedStart: start.toISOString(), suggestedEnd: end.toISOString(), reason: 'Menos conflitos + energia média alta' });
+});
+
 app.get('/orchestrator/opportunities', async (req: any, res) => {
   const { minutes = 30 } = req.query as any;
   res.json([{ id: 'opp1', title: `Você tem ${minutes}min livres`, suggestion: 'Adiantar tarefa de alta prioridade' }]);
