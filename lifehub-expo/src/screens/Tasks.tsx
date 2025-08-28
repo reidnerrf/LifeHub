@@ -1,22 +1,46 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, FlatList } from 'react-native';
 import { useTheme } from '../theme/ThemeProvider';
 import { useTasks } from '../store/tasks';
+import { api } from '../services/api';
 
 export default function Tasks() {
   const t = useTheme();
   const { tasks, setTasks } = useTasks();
   const [title, setTitle] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const addTask = () => {
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const list = await api.listTasks();
+        setTasks(list.map((t: any) => ({ id: t._id, title: t.title })));
+      } catch (e: any) {
+        setError('Falha ao carregar tarefas');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const addTask = async () => {
     if (!title.trim()) return;
-    setTasks(prev => [...prev, { id: Date.now().toString(), title }]);
-    setTitle('');
+    try {
+      const created = await api.createTask({ title, completed: false });
+      setTasks(prev => [{ id: created._id, title: created.title }, ...prev]);
+      setTitle('');
+    } catch {
+      setError('Falha ao criar tarefa');
+    }
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: t.background, padding: 16 }}>
       <Text style={{ color: t.text, fontSize: 20, fontWeight: '600', marginBottom: 12 }}>Tarefas</Text>
+      {loading && <Text style={{ color: t.textLight, marginBottom: 8 }}>Carregando...</Text>}
+      {error && <Text style={{ color: 'red', marginBottom: 8 }}>{error}</Text>}
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
         <TextInput value={title} onChangeText={setTitle} placeholder="Nova tarefa"
           placeholderTextColor={t.textLight}
