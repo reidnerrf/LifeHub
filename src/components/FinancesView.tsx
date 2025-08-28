@@ -4,6 +4,7 @@ import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
 import { storage, KEYS } from '../services/storage';
+import { isPremiumActive } from '../subscription';
 
 const FinancesView: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('month');
@@ -171,6 +172,7 @@ const FinancesView: React.FC = () => {
 
   const savingsProgress = (financialData.savings / financialData.savingsGoal) * 100;
 
+  const premium = isPremiumActive();
   return (
     <div className="flex flex-col space-y-6 pb-6">
       {/* Header */}
@@ -231,7 +233,7 @@ const FinancesView: React.FC = () => {
         </div>
       </Card>
 
-      {/* Savings Goal */}
+      {/* Savings Goal (Premium) */}
       <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
@@ -255,9 +257,13 @@ const FinancesView: React.FC = () => {
           <Progress value={savingsProgress} className="h-3" />
         </div>
         
-        <p className="text-xs text-[var(--app-text-light)]">
-          Faltam R$ {(financialData.savingsGoal - financialData.savings).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para sua meta
-        </p>
+        {premium ? (
+          <p className="text-xs text-[var(--app-text-light)]">
+            Faltam R$ {(financialData.savingsGoal - financialData.savings).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para sua meta
+          </p>
+        ) : (
+          <div className="text-xs text-[var(--app-text)] p-3 rounded-lg bg-[var(--app-yellow)]10">Recurso Premium — faça upgrade para ver metas completas.</div>
+        )}
       </Card>
 
       {/* Bills to Pay */}
@@ -340,49 +346,40 @@ const FinancesView: React.FC = () => {
         <div className="mt-3 text-sm text-[var(--app-text)]">Saldo: R$ {monthlySummary.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
       </Card>
 
-      {/* Categories Budget */}
+      {/* Categories Budget (Premium) */}
       <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
         <h3 className="font-medium text-[var(--app-text)] mb-4">Orçamento por Categoria</h3>
-        <div className="space-y-4">
-          {categories.map((category, index) => {
-            const progress = (category.spent / category.budget) * 100;
-            const isOverBudget = progress > 100;
-            
-            return (
-              <div key={index}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-lg">{category.icon}</span>
-                    <span className="text-sm font-medium text-[var(--app-text)]">{category.name}</span>
+        {premium ? (
+          <div className="space-y-4">
+            {categories.map((category, index) => {
+              const progress = (category.spent / category.budget) * 100;
+              const isOverBudget = progress > 100;
+              return (
+                <div key={index}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-lg">{category.icon}</span>
+                      <span className="text-sm font-medium text-[var(--app-text)]">{category.name}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className={`text-sm font-medium ${isOverBudget ? 'text-[var(--app-red)]' : 'text-[var(--app-text)]'}`}>R$ {category.spent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                      <span className="text-xs text-[var(--app-text-light)]"> / R$ {category.budget.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className={`text-sm font-medium ${isOverBudget ? 'text-[var(--app-red)]' : 'text-[var(--app-text)]'}`}>
-                      R$ {category.spent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </span>
-                    <span className="text-xs text-[var(--app-text-light)]">
-                      / R$ {category.budget.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
+                  <Progress value={Math.min(progress, 100)} className="h-2" style={{ '--progress-foreground': isOverBudget ? 'var(--app-red)' : category.color } as React.CSSProperties} />
+                  {isOverBudget && (
+                    <div className="flex items-center space-x-1 mt-1">
+                      <AlertCircle size={12} className="text-[var(--app-red)]" />
+                      <span className="text-xs text-[var(--app-red)]">{Math.round(progress - 100)}% acima do orçamento</span>
+                    </div>
+                  )}
                 </div>
-                <Progress 
-                  value={Math.min(progress, 100)}
-                  className="h-2"
-                  style={{ 
-                    '--progress-foreground': isOverBudget ? 'var(--app-red)' : category.color
-                  } as React.CSSProperties}
-                />
-                {isOverBudget && (
-                  <div className="flex items-center space-x-1 mt-1">
-                    <AlertCircle size={12} className="text-[var(--app-red)]" />
-                    <span className="text-xs text-[var(--app-red)]">
-                      {Math.round(progress - 100)}% acima do orçamento
-                    </span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-3 rounded-lg bg-[var(--app-yellow)]10 text-[var(--app-text)] text-sm">Relatórios e orçamento detalhados são Premium. Faça upgrade em Configurações.</div>
+        )}
       </Card>
 
       {/* Recent Transactions */}
