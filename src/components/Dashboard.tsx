@@ -39,6 +39,7 @@ const Dashboard: React.FC = () => {
   const [rescheduleSuggestions, setRescheduleSuggestions] = useState<any[]>([]);
   const [userStats, setUserStats] = useState<any>(null);
   const [achievements, setAchievements] = useState<any[]>([]);
+  const [weeklyQuests, setWeeklyQuests] = useState<any[]>([]);
 
   const showToast = (message: string, type: 'success' | 'info' | 'error' = 'info') => {
     const id = Math.random().toString(36).slice(2);
@@ -80,6 +81,12 @@ const Dashboard: React.FC = () => {
       }
     };
     loadGamification();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try { setWeeklyQuests(await api.getQuests()); } catch {}
+    })();
   }, []);
 
   // Sample data for charts
@@ -347,6 +354,33 @@ const Dashboard: React.FC = () => {
                 {s.description && (
                   <div className="text-xs text-[var(--app-text-light)] mt-1">{s.description}</div>
                 )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Weekly Quests */}
+      {weeklyQuests.length > 0 && (
+        <Card className="p-5 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-2">
+              <Trophy size={18} className="text-[var(--app-purple)]" />
+              <h3 className="font-medium text-[var(--app-text)]">Quests da Semana</h3>
+            </div>
+            <button onClick={async () => { try { setWeeklyQuests(await api.refreshQuests()); } catch {} }} className="text-xs px-3 py-1 rounded-lg bg-[var(--app-light-gray)]">Atualizar</button>
+          </div>
+          <div className="space-y-3">
+            {weeklyQuests.map((q) => (
+              <div key={q._id} className="p-3 rounded-xl bg-[var(--app-light-gray)] flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-[var(--app-text)]">{q.title}</div>
+                  <div className="text-xs text-[var(--app-text-light)]">{q.progress}/{q.target}</div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button onClick={async () => { try { await api.progressQuest(q._id, 1); setWeeklyQuests(await api.getQuests()); } catch {} }} className="px-2 py-1 text-xs rounded bg-[var(--app-blue)] text-white">+1</button>
+                  {q.completed && <Badge className="bg-[var(--app-green)]15 text-[var(--app-green)]">Concluída</Badge>}
+                </div>
               </div>
             ))}
           </div>

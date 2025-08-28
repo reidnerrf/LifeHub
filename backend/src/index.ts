@@ -420,6 +420,16 @@ app.post('/integrations/google/oauth/callback', async (req: any, res) => {
   }
 });
 
+// Optional GET callback to finalize OAuth via browser redirect
+app.get('/oauth/google/callback', async (req: any, res) => {
+  const { code } = req.query || {};
+  if (!code) return res.status(400).send('Missing code');
+  // Store code temporarily in memory is not ideal; better to exchange here if user-bound.
+  // For demo, redirect front with code in hash for client to POST to backend.
+  const frontend = process.env.FRONTEND_URL || 'http://localhost:5173';
+  res.redirect(`${frontend}/#google_code=${encodeURIComponent(String(code))}`);
+});
+
 async function getValidAccessToken(userId: string) {
   const doc = await GoogleAuth.findOne({ userId });
   if (!doc) return null;
