@@ -80,10 +80,44 @@ const SuggestionSchema = new mongoose_1.Schema({
     kind: { type: String, default: 'generic' },
     metadata: { type: mongoose_1.Schema.Types.Mixed },
 }, { timestamps: true });
+// Additional core models
+const EventSchema = new mongoose_1.Schema({
+    userId: { type: String, index: true },
+    title: { type: String, required: true },
+    start: { type: Date, required: true },
+    end: { type: Date, required: true },
+    location: { type: String },
+    source: { type: String, default: 'local' }
+}, { timestamps: true });
+const HabitSchema = new mongoose_1.Schema({
+    userId: { type: String, index: true },
+    name: { type: String, required: true },
+    schedule: { type: String, default: 'daily' },
+    target: { type: Number, default: 1 }
+}, { timestamps: true });
+const CheckinSchema = new mongoose_1.Schema({
+    userId: { type: String, index: true },
+    habitId: { type: String, index: true },
+    date: { type: Date, required: true },
+    mood: { type: Number },
+    energy: { type: Number },
+    sleepHours: { type: Number }
+}, { timestamps: true });
+const TransactionSchema = new mongoose_1.Schema({
+    userId: { type: String, index: true },
+    type: { type: String, enum: ['payable', 'receivable'], required: true },
+    amount: { type: Number, required: true },
+    dueDate: { type: Date },
+    description: { type: String }
+}, { timestamps: true });
 const User = (0, mongoose_1.model)('User', UserSchema);
 const Task = (0, mongoose_1.model)('Task', TaskSchema);
 const Note = (0, mongoose_1.model)('Note', NoteSchema);
 const Suggestion = (0, mongoose_1.model)('Suggestion', SuggestionSchema);
+const Event = (0, mongoose_1.model)('Event', EventSchema);
+const Habit = (0, mongoose_1.model)('Habit', HabitSchema);
+const Checkin = (0, mongoose_1.model)('Checkin', CheckinSchema);
+const Transaction = (0, mongoose_1.model)('Transaction', TransactionSchema);
 // Auth
 const authMiddleware = (req, res, next) => {
     const authHeader = req.headers.authorization;
@@ -234,6 +268,61 @@ app.post('/ai/reschedule', (req, res) => {
 app.post('/integrations/google/import', async (req, res) => {
     // Stub: pretend we imported 3 events
     res.json({ imported: 3, status: 'ok' });
+});
+// Orchestrator endpoints (stubs with simple heuristics)
+app.post('/orchestrator/schedule', async (req, res) => {
+    const { tasks = [], events = [], freeBlocks = [] } = req.body || {};
+    const allocations = tasks.map((t, idx) => {
+        const base = freeBlocks[idx % Math.max(1, freeBlocks.length)] || {};
+        const start = new Date(base.start || new Date());
+        const end = new Date(start.getTime() + ((t.durationMin || 30) * 60000));
+        return { taskId: t.id, start: start.toISOString(), end: end.toISOString(), reason: 'Primeiro slot disponível' };
+    });
+    res.json({ allocations });
+});
+app.post('/orchestrator/reschedule', async (req, res) => {
+    const { impactedTasks = [], nextBlocks = [] } = req.body || {};
+    const suggestions = impactedTasks.slice(0, nextBlocks.length).map((t, i) => {
+        const s = new Date(nextBlocks[i].start || new Date());
+        const e = new Date(s.getTime() + ((t.durationMin || 30) * 60000));
+        return { taskId: t.id, suggestedStart: s.toISOString(), suggestedEnd: e.toISOString(), reason: 'Reagendamento automático' };
+    });
+    res.json({ suggestions });
+});
+app.get('/orchestrator/opportunities', async (req, res) => {
+    const { minutes = 30 } = req.query;
+    res.json([{ id: 'opp1', title: `Você tem ${minutes}min livres`, suggestion: 'Adiantar tarefa de alta prioridade' }]);
+});
+// Notifications targeting (stub)
+app.post('/notifications/next-window', (req, res) => {
+    const { candidateWindows = [] } = req.body || {};
+    const best = candidateWindows[0] || { start: new Date(), end: new Date(Date.now() + 30 * 60000) };
+    res.json({ window: best, score: 0.7 });
+});
+// RAG stubs on notes
+app.post('/rag/notes/search', async (req, res) => {
+    const { query = '' } = req.body || {};
+    res.json({ query, results: [] });
+});
+app.post('/rag/notes/summarize', async (req, res) => {
+    const { noteId } = req.body || {};
+    res.json({ noteId, summary: 'Resumo indisponível (stub).' });
+});
+// Reports
+app.get('/reports/weekly-insights', async (req, res) => {
+    res.json({
+        period: 'last_7_days',
+        insights: [
+            { id: 'i1', text: 'Quando dorme <6h, conclui ~30% menos tarefas (estimativa).' }
+        ]
+    });
+});
+// Assistant endpoints
+app.post('/assistant/plan-week', async (req, res) => {
+    res.json({ message: 'Plano semanal gerado (stub)', actions: [] });
+});
+app.post('/assistant/ritual/pre-deep-work', async (req, res) => {
+    res.json({ steps: ['Respiração 2min', 'Preparar ambiente', 'Definir objetivo da sessão'] });
 });
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 4000;
 app.listen(port, () => logger.info(`api on ${port}`));

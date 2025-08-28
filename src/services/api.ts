@@ -38,6 +38,25 @@ export const api = {
   reschedule: (payload: any) => http('/ai/reschedule', { method: 'POST', body: JSON.stringify(payload) }),
 
   // Integrations
-  importGoogle: () => http('/integrations/google/import', { method: 'POST' })
+  importGoogle: () => http('/integrations/google/import', { method: 'POST' }),
+
+  // Orchestrator
+  orchestrateSchedule: (payload: any) => http('/orchestrator/schedule', { method: 'POST', body: JSON.stringify(payload) }),
+  orchestrateReschedule: (payload: any) => http('/orchestrator/reschedule', { method: 'POST', body: JSON.stringify(payload) }),
+  findOpportunities: (minutes: number) => http(`/orchestrator/opportunities?minutes=${encodeURIComponent(minutes)}`),
+
+  // Notifications targeting
+  nextNotificationWindow: (payload: any) => http('/notifications/next-window', { method: 'POST', body: JSON.stringify(payload) }),
+
+  // RAG
+  notesSemanticSearch: (payload: { query: string }) => http('/rag/notes/search', { method: 'POST', body: JSON.stringify(payload) }),
+  notesSummarize: (payload: { noteId: string }) => http('/rag/notes/summarize', { method: 'POST', body: JSON.stringify(payload) }),
+
+  // Reports
+  weeklyInsights: () => http('/reports/weekly-insights'),
+
+  // Assistant
+  planWeek: (payload: any) => http('/assistant/plan-week', { method: 'POST', body: JSON.stringify(payload) }),
+  ritualPreDeepWork: (payload: any) => http('/assistant/ritual/pre-deep-work', { method: 'POST', body: JSON.stringify(payload) })
 };
 
