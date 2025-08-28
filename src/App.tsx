@@ -480,6 +480,23 @@ export default function App() {
         {/* Status Bar Spacer */}
         <div className="safe-area-top" />
         
+        {/* Trial badge */}
+        {(() => {
+          try {
+            const sub = storage.get<any>(KEYS.subscription);
+            if (!sub || sub.plan !== 'trial') return null;
+            const started = new Date(sub.startedAt || Date.now());
+            const duration = Number(sub.durationDays || 7);
+            const end = new Date(started.getTime() + duration * 24 * 60 * 60 * 1000);
+            const daysLeft = Math.max(0, Math.ceil((end.getTime() - Date.now()) / (24*60*60*1000)));
+            return (
+              <div className="fixed top-12 left-1/2 -translate-x-1/2 z-30 px-3 py-1 rounded-full bg-[var(--app-yellow)] text-white text-xs shadow">
+                Trial: {daysLeft} dias restantes
+              </div>
+            );
+          } catch { return null; }
+        })()}
+
         {/* Global Search Button */}
         <button
           onClick={() => setShowGlobalSearch(true)}

@@ -234,7 +234,7 @@ const FinancesView: React.FC = () => {
       </Card>
 
       {/* Savings Goal (Premium) */}
-      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm" ribbon={!premium ? (<span className="px-2 py-1 rounded bg-[var(--app-yellow)] text-white text-[10px]">Premium</span>) : undefined}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
             <Target size={20} className="text-[var(--app-green)]" />
@@ -267,7 +267,7 @@ const FinancesView: React.FC = () => {
       </Card>
 
       {/* Bills to Pay */}
-      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm" ribbon={!premium ? (<span className="px-2 py-1 rounded bg-[var(--app-yellow)] text-white text-[10px]">Premium</span>) : undefined}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-medium text-[var(--app-text)]">Contas a Pagar</h3>
           <Badge variant="secondary" className="bg-[var(--app-red)]15 text-[var(--app-red)]">

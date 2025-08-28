@@ -495,7 +495,7 @@ const Dashboard: React.FC = () => {
 
       {/* Advanced Reports (Premium Gate) */}
       {!premiumActive && (
-        <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm" ribbon={<span className="px-2 py-1 rounded bg-[var(--app-yellow)] text-white text-[10px]">Premium</span>}>
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-semibold text-[var(--app-text)]">Relatórios Avançados</h3>
             <Badge className="bg-[var(--app-yellow)]15 text-[var(--app-yellow)] border-0">Premium</Badge>
