@@ -1,12 +1,17 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Plus, MoreVertical, Clock, Flag } from 'lucide-react';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
+import { storage } from '../services/storage';
+import { api } from '../services/api';
+import { SegmentedControl } from './ui/segmented-control';
+import { Tag } from './ui/tag';
+import { EmptyState } from './ui/empty-state';
 
 const TasksView: React.FC = () => {
   const [selectedBoard, setSelectedBoard] = useState('kanban');
 
-  const tasks = {
+  const [tasks, setTasks] = useState({
     todo: [
       {
         id: 1,
@@ -45,7 +50,28 @@ const TasksView: React.FC = () => {
         tags: ['email'],
       },
     ],
-  };
+  });
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = await api.listTasks();
+        const mapped = {
+          todo: list.filter(t => !t.completed).map(t => ({ id: t._id, title: t.title, description: '', priority: 'medium', dueDate: '', tags: [] })),
+          inProgress: [],
+          done: list.filter(t => t.completed).map(t => ({ id: t._id, title: t.title, description: '', priority: 'low', dueDate: '', tags: [] })),
+        } as any;
+        setTasks(mapped);
+      } catch {
+        const saved = storage.get<typeof tasks>('tasks');
+        if (saved) setTasks(saved);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    storage.set('tasks', tasks);
+  }, [tasks]);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -66,13 +92,72 @@ const TasksView: React.FC = () => {
     { id: 'done', title: 'Concluído', color: 'var(--app-green)', tasks: tasks.done },
   ];
 
+  const createQuickTask = async () => {
+    const title = prompt('Nova tarefa');
+    if (!title) return;
+    try {
+      const created = await api.createTask({ title, completed: false });
+      setTasks(prev => ({ ...prev, todo: [{ id: created._id, title: created.title, description: '', priority: 'medium', dueDate: '', tags: [] }, ...prev.todo] }));
+    } catch {
+      setTasks(prev => ({ ...prev, todo: [{ id: Date.now(), title, description: '', priority: 'medium', dueDate: '', tags: [] }, ...prev.todo] }));
+    }
+  };
+
+  const toggleComplete = async (task: any) => {
+    try {
+      const id = String(task.id);
+      const updated = await api.updateTask(id, { completed: !task.completed });
+      setTasks(prev => ({
+        ...prev,
+        todo: prev.todo.filter(t => String(t.id) !== id),
+        inProgress: prev.inProgress.filter(t => String(t.id) !== id),
+        done: prev.done.filter(t => String(t.id) !== id),
+      }));
+      if (updated && updated._id) {
+        const mapped = { id: updated._id, title: updated.title, description: '', priority: 'medium', dueDate: '', tags: [], completed: updated.completed };
+        setTasks(prev => ({
+          ...prev,
+          ...(updated.completed ? { done: [mapped, ...prev.done] } : { todo: [mapped, ...prev.todo] })
+        }));
+      }
+    } catch {}
+  };
+
+  const deleteTask = async (task: any) => {
+    const id = String(task.id);
+    try { await api.deleteTask(id); } catch {}
+    setTasks(prev => ({
+      ...prev,
+      todo: prev.todo.filter(t => String(t.id) !== id),
+      inProgress: prev.inProgress.filter(t => String(t.id) !== id),
+      done: prev.done.filter(t => String(t.id) !== id),
+    }));
+  };
+
+  const editTask = async (task: any) => {
+    const title = prompt('Editar título', task.title);
+    if (!title) return;
+    const id = String(task.id);
+    try { await api.updateTask(id, { title }); } catch {}
+    setTasks(prev => ({
+      ...prev,
+      todo: prev.todo.map(t => String(t.id) === id ? { ...t, title } : t),
+      inProgress: prev.inProgress.map(t => String(t.id) === id ? { ...t, title } : t),
+      done: prev.done.map(t => String(t.id) === id ? { ...t, title } : t),
+    }));
+  };
+
   const TaskCard = ({ task }: { task: any }) => (
     <Card className="p-4 bg-white rounded-xl border-0 shadow-sm mb-3">
       <div className="flex items-start justify-between mb-2">
         <h4 className="text-sm font-medium text-gray-900 line-clamp-2">{task.title}</h4>
-        <button className="text-[var(--app-gray)] p-1">
-          <MoreVertical size={16} />
-        </button>
+        <div className="flex items-center space-x-2">
+          <button className="text-xs px-2 py-1 rounded-lg bg-[var(--app-light-gray)]" onClick={() => toggleComplete(task)}>
+            {task.completed ? 'Reabrir' : 'Concluir'}
+          </button>
+          <button className="text-xs px-2 py-1 rounded-lg bg-[var(--app-light-gray)]" onClick={() => editTask(task)}>Editar</button>
+          <button className="text-xs px-2 py-1 rounded-lg bg-[var(--app-red)] text-white" onClick={() => deleteTask(task)}>Excluir</button>
+        </div>
       </div>
       
       {task.description && (
@@ -92,9 +177,7 @@ const TasksView: React.FC = () => {
       
       <div className="flex flex-wrap gap-1">
         {task.tags.map((tag: string, index: number) => (
-          <Badge key={index} variant="secondary" className="text-xs px-2 py-1 rounded-full">
-            {tag}
-          </Badge>
+          <Tag key={index}>{tag}</Tag>
         ))}
       </div>
     </Card>
@@ -105,28 +188,14 @@ const TasksView: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold text-gray-900">Tarefas</h1>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => setSelectedBoard('list')}
-            className={`px-3 py-1 rounded-lg text-sm ${
-              selectedBoard === 'list' 
-                ? 'bg-[var(--app-blue)] text-white' 
-                : 'bg-gray-100 text-[var(--app-gray)]'
-            }`}
-          >
-            Lista
-          </button>
-          <button
-            onClick={() => setSelectedBoard('kanban')}
-            className={`px-3 py-1 rounded-lg text-sm ${
-              selectedBoard === 'kanban' 
-                ? 'bg-[var(--app-blue)] text-white' 
-                : 'bg-gray-100 text-[var(--app-gray)]'
-            }`}
-          >
-            Kanban
-          </button>
-        </div>
+        <SegmentedControl
+          options={[
+            { label: 'Lista', value: 'list' },
+            { label: 'Kanban', value: 'kanban' }
+          ]}
+          value={selectedBoard}
+          onChange={setSelectedBoard}
+        />
       </div>
 
       {/* Stats */}
@@ -164,16 +233,20 @@ const TasksView: React.FC = () => {
                     <h3 className="font-medium text-gray-900">{column.title}</h3>
                     <span className="text-sm text-[var(--app-gray)]">({column.tasks.length})</span>
                   </div>
-                  <button className="text-[var(--app-gray)]">
+                  <button className="text-[var(--app-gray)]" onClick={createQuickTask}>
                     <Plus size={16} />
                   </button>
                 </div>
                 
-                <div className="space-y-3">
-                  {column.tasks.map((task) => (
-                    <TaskCard key={task.id} task={task} />
-                  ))}
-                </div>
+                {column.tasks.length === 0 ? (
+                  <EmptyState title="Sem itens" description="Adicione uma tarefa para começar" />
+                ) : (
+                  <div className="space-y-3">
+                    {column.tasks.map((task) => (
+                      <TaskCard key={task.id} task={task} />
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -183,9 +256,13 @@ const TasksView: React.FC = () => {
       {/* List View */}
       {selectedBoard === 'list' && (
         <div className="flex-1 space-y-3">
-          {[...tasks.todo, ...tasks.inProgress, ...tasks.done].map((task) => (
-            <TaskCard key={task.id} task={task} />
-          ))}
+          {[...tasks.todo, ...tasks.inProgress, ...tasks.done].length === 0 ? (
+            <EmptyState title="Nenhuma tarefa" description="Crie sua primeira tarefa" />
+          ) : (
+            [...tasks.todo, ...tasks.inProgress, ...tasks.done].map((task) => (
+              <TaskCard key={task.id} task={task} />
+            ))
+          )}
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { 
   Calendar, 
   CheckSquare, 
@@ -27,9 +27,13 @@ import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import PremiumModal from './PremiumModal';
+import { aiOrchestrator } from '../services/aiOrchestrator';
+import { api } from '../services/api';
 
 const Dashboard: React.FC = () => {
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
+  const [showPremium, setShowPremium] = useState(false);
 
   // Sample data for charts
   const productivityData = [
@@ -137,6 +141,31 @@ const Dashboard: React.FC = () => {
 
   const visibleNotifications = smartNotifications.filter(n => !dismissedNotifications.includes(n.id));
 
+  const [aiSuggestions, setAiSuggestions] = useState<{ id: string; title: string; description?: string }[]>([]);
+  const [planningScore, setPlanningScore] = useState<{ score: number; insights: string[] } | null>(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = await api.listSuggestions();
+        setAiSuggestions(list);
+      } catch {
+        setAiSuggestions(aiOrchestrator.getDailySuggestions(new Date()).map(s => ({ id: s.id, title: s.title, description: s.description })));
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const payload = { totalTasks: todayTasks.length, conflictingEvents: 0, overbookedMinutes: 0, freeBlocks: [{ start: new Date().toISOString(), end: new Date(Date.now()+60*60*1000).toISOString() }] };
+        const res = await api.scorePlanning(payload);
+        setPlanningScore(res);
+      } catch {
+        setPlanningScore({ score: 78, insights: ['Distribua melhor as tarefas','Reserve folgas para imprevistos'] });
+      }
+    })();
+  }, []);
+
   return (
     <div className="flex flex-col space-y-6 pb-6">
       {/* Header with Motivational Message */}
@@ -170,6 +199,43 @@ const Dashboard: React.FC = () => {
         <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16" />
         <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full -ml-12 -mb-12" />
       </Card>
+
+      {/* Auto-rescheduler */}
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-medium text-[var(--app-text)]">Reagendar automaticamente</h3>
+          <button
+            className="text-xs px-3 py-1 rounded-lg bg-[var(--app-blue)] text-white"
+            onClick={async () => {
+              try {
+                const payload = { tasks: [{ id: 't1', durationMin: 30 }], freeBlocks: [{ start: new Date().toISOString(), end: new Date(Date.now()+60*60*1000).toISOString() }] };
+                const res = await api.reschedule(payload);
+                alert(`Sugestões: ${res.suggestions.map(s => `${s.taskId} -> ${new Date(s.suggestedStart).toLocaleTimeString('pt-BR')}`).join(', ')}`);
+              } catch (e) {
+                alert('Não foi possível gerar sugestões agora.');
+              }
+            }}
+          >
+            Gerar sugestões
+          </button>
+        </div>
+        <p className="text-sm text-[var(--app-text-light)]">Gera horários sugeridos para suas tarefas livres com 1 toque.</p>
+      </Card>
+
+      {/* Planning Score */}
+      {planningScore && (
+        <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-semibold text-[var(--app-text)]">Score de Planejamento</h3>
+            <span className="text-[var(--app-blue)] font-bold">{planningScore.score}</span>
+          </div>
+          <ul className="list-disc ml-6 text-sm text-[var(--app-text-light)]">
+            {planningScore.insights.map((i, idx) => (
+              <li key={idx}>{i}</li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {/* Smart Notifications */}
       {visibleNotifications.length > 0 && (
@@ -215,6 +281,29 @@ const Dashboard: React.FC = () => {
             );
           })}
         </div>
+      )}
+
+      {/* AI Suggestions */}
+      {aiSuggestions.length > 0 && (
+        <Card className="p-5 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-2">
+              <Sparkles size={18} className="text-[var(--app-blue)]" />
+              <h3 className="font-medium text-[var(--app-text)]">Sugestões da IA</h3>
+            </div>
+            <button onClick={() => setShowPremium(true)} className="text-xs px-3 py-1 rounded-lg bg-[var(--app-blue)] text-white">Desbloquear Premium</button>
+          </div>
+          <div className="space-y-3">
+            {aiSuggestions.map(s => (
+              <div key={s.id} className="p-3 rounded-xl bg-[var(--app-light-gray)]">
+                <div className="text-sm font-medium text-[var(--app-text)]">{s.title}</div>
+                {s.description && (
+                  <div className="text-xs text-[var(--app-text-light)] mt-1">{s.description}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
       )}
 
       {/* Stats Cards */}
@@ -444,6 +533,7 @@ const Dashboard: React.FC = () => {
           </button>
         </div>
       </Card>
+      <PremiumModal open={showPremium} onClose={() => setShowPremium(false)} />
     </div>
   );
 };

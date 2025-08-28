@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Search, Plus, FileText, Mic, Camera, Tag, Star, Archive, MoreVertical } from 'lucide-react';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
+import { EmptyState } from './ui/empty-state';
+import { api } from '../services/api';
+ 
 
 const NotesView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
-
-  const notes = [
+  const [notes, setNotes] = useState([
     {
       id: 1,
       title: 'Ideias para o Projeto',
@@ -70,7 +72,31 @@ const NotesView: React.FC = () => {
       date: '2025-08-22',
       color: 'var(--app-blue)',
     },
-  ];
+  ]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = await api.listNotes();
+        setNotes(list.map(n => ({ id: n._id, title: n.title, content: n.content, type: 'text', tags: n.tags || [], favorite: false, date: new Date().toISOString(), color: 'var(--app-blue)' })));
+      } catch {
+        // keep demo data
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('notes');
+      if (saved) setNotes(JSON.parse(saved));
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('notes', JSON.stringify(notes));
+    } catch {}
+  }, [notes]);
 
   const filters = [
     { id: 'all', label: 'Todas', count: notes.length },
@@ -126,6 +152,34 @@ const NotesView: React.FC = () => {
         </div>
       </div>
 
+      {/* Quick Add */}
+      <div className="flex items-center space-x-2">
+        <Input
+          type="text"
+          placeholder="Nova nota..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="flex-1 bg-[var(--app-light-gray)] border-0 rounded-2xl h-12"
+        />
+        <button
+          onClick={async () => {
+            const title = searchQuery.trim();
+            if (!title) return;
+            try {
+              const created = await api.createNote({ title, content: '' });
+              setNotes(prev => [{ id: created._id, title: created.title, content: created.content, type: 'text', tags: [], favorite: false, date: new Date().toISOString(), color: 'var(--app-blue)' }, ...prev]);
+              setSearchQuery('');
+            } catch {
+              setNotes(prev => [{ id: Date.now(), title, content: '', type: 'text', tags: [], favorite: false, date: new Date().toISOString(), color: 'var(--app-blue)' }, ...prev]);
+              setSearchQuery('');
+            }
+          }}
+          className="px-4 h-12 rounded-2xl bg-[var(--app-blue)] text-white"
+        >
+          Adicionar
+        </button>
+      </div>
+
       {/* Search */}
       <div className="relative">
         <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--app-gray)]" />
@@ -173,7 +227,9 @@ const NotesView: React.FC = () => {
 
       {/* Notes Grid */}
       <div className="grid grid-cols-1 gap-4">
-        {getFilteredNotes().map((note) => (
+        {getFilteredNotes().length === 0 ? (
+          <EmptyState title="Sem notas" description="Crie uma nota para começar" />
+        ) : getFilteredNotes().map((note) => (
           <Card 
             key={note.id} 
             className="p-4 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
@@ -194,9 +250,28 @@ const NotesView: React.FC = () => {
                 {note.favorite && (
                   <Star size={16} className="text-[var(--app-yellow)] fill-current" />
                 )}
-                <button className="text-[var(--app-gray)] hover:text-[var(--app-text)] transition-colors">
-                  <MoreVertical size={16} />
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    className="text-xs px-2 py-1 rounded-lg bg-[var(--app-light-gray)]"
+                    onClick={async () => {
+                      const title = prompt('Editar título', note.title);
+                      if (!title) return;
+                      try { await api.updateNote(String(note.id), { title }); } catch {}
+                      setNotes(prev => prev.map(n => n.id === note.id ? { ...n, title } : n));
+                    }}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    className="text-xs px-2 py-1 rounded-lg bg-[var(--app-red)] text-white"
+                    onClick={async () => {
+                      try { await api.deleteNote(String(note.id)); } catch {}
+                      setNotes(prev => prev.filter(n => n.id !== note.id));
+                    }}
+                  >
+                    Excluir
+                  </button>
+                </div>
               </div>
             </div>
 

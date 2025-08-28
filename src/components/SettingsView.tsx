@@ -21,6 +21,7 @@ import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Switch } from './ui/switch';
+import PremiumModal from './PremiumModal';
 
 interface SettingsViewProps {
   onBack: () => void;
@@ -28,6 +29,7 @@ interface SettingsViewProps {
 
 const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
+  const [showPremium, setShowPremium] = useState(false);
 
   const [notificationSettings, setNotificationSettings] = useState({
     pushEnabled: true,
@@ -144,6 +146,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
       badgeColor: 'var(--app-green)'
     },
     {
+      id: 'premium',
+      title: 'Plano Premium',
+      icon: <Zap size={20} />,
+      description: 'Desbloqueie IA completa e relatórios avançados',
+      badge: 'Recomendado',
+      badgeColor: 'var(--app-yellow)'
+    },
+    {
       id: 'general',
       title: 'Geral',
       icon: <Settings size={20} />,
@@ -219,6 +229,16 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
             <span className="text-sm text-[var(--app-text-light)]">07:00, 12:00, 19:00</span>
           </div>
         </div>
+      </Card>
+    </div>
+  );
+
+  const renderPremium = () => (
+    <div className="space-y-6">
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <h3 className="font-medium text-[var(--app-text)] mb-2">LifeHub Premium</h3>
+        <p className="text-sm text-[var(--app-text-light)] mb-4">IA proativa, relatórios avançados, finanças e automações.</p>
+        <Button onClick={() => setShowPremium(true)} className="bg-[var(--app-blue)] text-white rounded-xl">Ver planos</Button>
       </Card>
     </div>
   );
@@ -424,6 +444,37 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
           </Button>
         </div>
       </Card>
+
+      {/* User Scope */}
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <h3 className="font-medium text-[var(--app-text)] mb-2">Usuário atual</h3>
+        <div className="flex items-center space-x-2">
+          <input id="user-id-input" defaultValue={localStorage.getItem('userId') || ''} placeholder="public" className="flex-1 p-3 rounded-xl bg-[var(--app-light-gray)] border-0" />
+          <Button onClick={() => {
+            const el = document.getElementById('user-id-input') as HTMLInputElement | null;
+            const val = el?.value?.trim() || 'public';
+            try { localStorage.setItem('userId', val); } catch {}
+            import('../services/api').then(m => m && (m as any).setUserId && (m as any).setUserId(val));
+            alert('Usuário definido: ' + val);
+          }}>Salvar</Button>
+        </div>
+      </Card>
+
+      {/* Google Calendar Import (stub) */}
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <h3 className="font-medium text-[var(--app-text)] mb-2">Integração Google Calendar</h3>
+        <Button onClick={async () => {
+          try {
+            const mod = await import('../services/api');
+            const res = await (mod as any).api.importGoogle();
+            alert(`Importados: ${res.imported}`);
+          } catch {
+            alert('Falha ao importar (stub).');
+          }
+        }}>Importar eventos (stub)</Button>
+      </Card>
+
+      <PremiumModal open={showPremium} onClose={() => setShowPremium(false)} />
     </div>
   );
 };
