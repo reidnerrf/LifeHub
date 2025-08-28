@@ -59,8 +59,12 @@ export default function App() {
   // Check if user has completed onboarding
   useEffect(() => {
     const savedUser = localStorage.getItem('userId');
-    if (savedUser) {
-      import('./services/api').then(m => m && (m as any).setUserId && (m as any).setUserId(savedUser));
+    const savedToken = localStorage.getItem('token');
+    if (savedUser || savedToken) {
+      import('./services/api').then(m => {
+        if (savedUser && (m as any).setUserId) (m as any).setUserId(savedUser);
+        if (savedToken && (m as any).setAuth) (m as any).setAuth(savedToken);
+      });
     }
     const hasCompletedOnboarding = localStorage.getItem('hasCompletedOnboarding');
     const isLoggedIn = localStorage.getItem('isLoggedIn');

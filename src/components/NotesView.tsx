@@ -5,7 +5,7 @@ import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { EmptyState } from './ui/empty-state';
 import { api } from '../services/api';
-import { api } from '../services/api';
+ 
 
 const NotesView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
