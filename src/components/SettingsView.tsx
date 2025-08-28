@@ -23,6 +23,7 @@ import { Button } from './ui/button';
 import { Switch } from './ui/switch';
 import PremiumModal from './PremiumModal';
 import { storage, KEYS } from '../services/storage';
+import { isPremiumActive } from '../subscription';
 import { getLocale, setLocale } from '../i18n';
 import { api } from '../services/api';
 
@@ -466,21 +467,25 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-[var(--app-text)]">Densidade de layout</span>
                     <div className="flex items-center space-x-1">
-                      <Button size="sm" variant="outline" disabled>Compacto</Button>
-                      <Button size="sm" variant="outline" disabled>Padrão</Button>
-                      <Button size="sm" variant="outline" disabled>Conforto</Button>
+                      <Button size="sm" variant="outline" disabled={!isPremiumActive()} onClick={() => { storage.set(KEYS.appearanceDensity, 'compact'); alert('Densidade salva'); }}>Compacto</Button>
+                      <Button size="sm" variant="outline" disabled={!isPremiumActive()} onClick={() => { storage.set(KEYS.appearanceDensity, 'default'); alert('Densidade salva'); }}>Padrão</Button>
+                      <Button size="sm" variant="outline" disabled={!isPremiumActive()} onClick={() => { storage.set(KEYS.appearanceDensity, 'comfortable'); alert('Densidade salva'); }}>Conforto</Button>
                     </div>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-[var(--app-text)]">Fontes</span>
                     <div className="flex items-center space-x-1">
-                      <Button size="sm" variant="outline" disabled>Sans</Button>
-                      <Button size="sm" variant="outline" disabled>Serif</Button>
-                      <Button size="sm" variant="outline" disabled>Mono</Button>
+                      <Button size="sm" variant="outline" disabled={!isPremiumActive()} onClick={() => { storage.set(KEYS.appearanceFont, 'sans'); alert('Fonte salva'); }}>Sans</Button>
+                      <Button size="sm" variant="outline" disabled={!isPremiumActive()} onClick={() => { storage.set(KEYS.appearanceFont, 'serif'); alert('Fonte salva'); }}>Serif</Button>
+                      <Button size="sm" variant="outline" disabled={!isPremiumActive()} onClick={() => { storage.set(KEYS.appearanceFont, 'mono'); alert('Fonte salva'); }}>Mono</Button>
                     </div>
                   </div>
                   <div className="flex items-center justify-end">
-                    <Button size="sm" onClick={() => setShowPremium(true)}>Fazer upgrade</Button>
+                    {!isPremiumActive() ? (
+                      <Button size="sm" onClick={() => setShowPremium(true)}>Fazer upgrade</Button>
+                    ) : (
+                      <Button size="sm" variant="outline" onClick={() => alert('Personalizações premium ativadas!')}>Ativado</Button>
+                    )}
                   </div>
                 </div>
               </div>

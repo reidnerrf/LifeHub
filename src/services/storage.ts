@@ -37,6 +37,11 @@ export const KEYS = {
   bills: 'bills',
   receivables: 'receivables',
   transactions: 'transactions',
-  subscription: 'subscription'
+  subscription: 'subscription',
+  appearanceExtraTheme: 'appearance.extraTheme',
+  appearanceAvatar: 'appearance.avatar',
+  appearanceIconPack: 'appearance.iconPack',
+  appearanceDensity: 'appearance.density',
+  appearanceFont: 'appearance.font'
 } as const;
 
