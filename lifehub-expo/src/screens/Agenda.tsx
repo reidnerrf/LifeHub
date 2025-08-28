@@ -5,7 +5,9 @@ import {
   StyleSheet, 
   TouchableOpacity, 
   Alert,
-  Dimensions
+  Dimensions,
+  ScrollView,
+  FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeProvider';
@@ -16,6 +18,12 @@ import CalendarView as WeekView from '../components/CalendarView';
 import DayView from '../components/DayView';
 import AgendaSuggestions from '../components/AgendaSuggestions';
 import SyncManager from '../components/SyncManager';
+import { VoiceRecognitionModal } from '../components/VoiceRecognitionModal';
+import { EventTemplatesModal } from '../components/EventTemplatesModal';
+import { AIRescheduleModal } from '../components/AIRescheduleModal';
+import { SharedCalendarsModal } from '../components/SharedCalendarsModal';
+import { ProductivityAnalysisModal } from '../components/ProductivityAnalysisModal';
+import { ExternalIntegrationsModal } from '../components/ExternalIntegrationsModal';
 
 const { width } = Dimensions.get('window');
 
@@ -30,7 +38,12 @@ export default function Agenda() {
     setCurrentDate,
     addEvent,
     updateEvent,
-    deleteEvent
+    deleteEvent,
+    getProductivityStats,
+    getWidgetData,
+    isOffline,
+    syncOfflineChanges,
+    getPendingSync,
   } = useEvents();
   
   const [loading, setLoading] = useState(false);
@@ -38,6 +51,18 @@ export default function Agenda() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showSyncManager, setShowSyncManager] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+
+  // Novos modais
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false);
+  const [showAIRescheduleModal, setShowAIRescheduleModal] = useState(false);
+  const [showSharedCalendarsModal, setShowSharedCalendarsModal] = useState(false);
+  const [showProductivityModal, setShowProductivityModal] = useState(false);
+  const [showIntegrationsModal, setShowIntegrationsModal] = useState(false);
+
+  const stats = getProductivityStats();
+  const widgetData = getWidgetData();
+  const pendingSync = getPendingSync();
 
   useEffect(() => {
     loadEvents();
@@ -63,6 +88,10 @@ export default function Agenda() {
         reminders: event.reminders || [],
         externalId: event.externalId,
         externalSource: event.externalSource || 'local',
+        participants: event.participants || [],
+        notes: event.notes || '',
+        attachments: event.attachments || [],
+        aiSuggestions: event.aiSuggestions || {},
         createdAt: new Date(event.createdAt),
         updatedAt: new Date(event.updatedAt),
       }));
@@ -93,6 +122,10 @@ export default function Agenda() {
         reminders: created.reminders || [],
         externalId: created.externalId,
         externalSource: created.externalSource || 'local',
+        participants: created.participants || [],
+        notes: created.notes || '',
+        attachments: created.attachments || [],
+        aiSuggestions: created.aiSuggestions || {},
         createdAt: new Date(created.createdAt),
         updatedAt: new Date(created.updatedAt),
       };
@@ -102,141 +135,324 @@ export default function Agenda() {
     }
   };
 
-  const handleUpdateEvent = async (eventId: string, updates: any) => {
+  const handleUpdateEvent = async (id: string, updates: any) => {
     try {
-      await api.updateEvent(eventId, updates);
-      updateEvent(eventId, updates);
+      await api.updateEvent(id, updates);
+      updateEvent(id, updates);
     } catch (error) {
       Alert.alert('Erro', 'Falha ao atualizar evento');
     }
   };
 
-  const handleDeleteEvent = async (eventId: string) => {
-    try {
-      await api.deleteEvent(eventId);
-      deleteEvent(eventId);
-    } catch (error) {
-      Alert.alert('Erro', 'Falha ao excluir evento');
-    }
-  };
-
-  const handleEventPress = (event: Event) => {
-    setSelectedEvent(event);
-    // Aqui você pode abrir um modal de detalhes do evento
+  const handleDeleteEvent = async (id: string) => {
     Alert.alert(
-      event.title,
-      `${event.description || 'Sem descrição'}\n\n${event.startTime.toLocaleString('pt-BR')} - ${event.endTime.toLocaleString('pt-BR')}`,
+      'Confirmar exclusão',
+      'Tem certeza que deseja excluir este evento?',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Editar', onPress: () => {/* Implementar edição */} },
-        { text: 'Excluir', style: 'destructive', onPress: () => handleDeleteEvent(event.id) }
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.deleteEvent(id);
+              deleteEvent(id);
+            } catch (error) {
+              Alert.alert('Erro', 'Falha ao excluir evento');
+            }
+          },
+        },
       ]
     );
   };
 
-  const handleDatePress = (date: Date) => {
-    setCurrentDate(date);
-    setView('day');
+  const handleSyncOffline = async () => {
+    try {
+      const success = await syncOfflineChanges();
+      if (success) {
+        Alert.alert('Sucesso', 'Sincronização concluída!');
+      } else {
+        Alert.alert('Erro', 'Falha na sincronização');
+      }
+    } catch (error) {
+      Alert.alert('Erro', 'Erro durante a sincronização');
+    }
   };
 
-  const handleTimeSlotPress = (time: Date) => {
-    // Abrir sugestões de IA para criar evento
-    setShowSuggestions(true);
+  const handleTemplateSelect = (template: any) => {
+    // Implementar criação de evento a partir do template
+    Alert.alert('Template Selecionado', `Template "${template.name}" selecionado`);
   };
 
-  const handleSelectTime = (selectedTime: Date) => {
-    // Criar evento com o horário selecionado
-    const endTime = new Date(selectedTime);
-    endTime.setMinutes(endTime.getMinutes() + 60); // 1 hora padrão
-    
-    const newEvent = {
-      title: 'Novo Evento',
-      description: '',
-      startTime: selectedTime,
-      endTime: endTime,
-      location: '',
-      type: 'event' as Event['type'],
-      priority: 'medium' as Event['priority'],
-      tags: [],
-      isAllDay: false,
-      reminders: [],
-    };
-    
-    handleCreateEvent(newEvent);
+  const handleVoiceEventCreated = (event: any) => {
+    handleCreateEvent(event);
   };
 
   const getViewIcon = (viewType: CalendarView) => {
     switch (viewType) {
-      case 'month': return 'calendar';
-      case 'week': return 'calendar-outline';
-      case 'day': return 'today';
-      default: return 'calendar';
+      case 'month':
+        return 'calendar-outline';
+      case 'week':
+        return 'calendar';
+      case 'day':
+        return 'today-outline';
+      default:
+        return 'calendar-outline';
     }
   };
 
   const getViewLabel = (viewType: CalendarView) => {
     switch (viewType) {
-      case 'month': return 'Mês';
-      case 'week': return 'Semana';
-      case 'day': return 'Dia';
-      default: return 'Mês';
-    }
-  };
-
-  const navigateDate = (direction: 'prev' | 'next') => {
-    const newDate = new Date(currentDate);
-    
-    switch (view) {
       case 'month':
-        newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1));
-        break;
+        return 'Mês';
       case 'week':
-        newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7));
-        break;
+        return 'Semana';
       case 'day':
-        newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1));
-        break;
+        return 'Dia';
+      default:
+        return 'Semana';
     }
-    
-    setCurrentDate(newDate);
   };
 
-  const goToToday = () => {
-    setCurrentDate(new Date());
+  const formatDuration = (minutes: number) => {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours > 0) {
+      return `${hours}h ${mins}min`;
+    }
+    return `${mins}min`;
   };
 
-  const getMonthStats = () => {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    const monthEvents = events.filter(event => {
-      const eventDate = new Date(event.startTime);
-      return eventDate.getFullYear() === year && eventDate.getMonth() === month;
-    });
+  const renderQuickActions = () => (
+    <View style={styles.quickActionsContainer}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View style={styles.quickActionsContent}>
+          <TouchableOpacity
+            onPress={() => setShowVoiceModal(true)}
+            style={[styles.quickActionButton, { backgroundColor: t.primary }]}
+          >
+            <Ionicons name="mic" size={16} color="#fff" />
+            <Text style={[styles.quickActionText, { color: '#fff' }]}>Voz</Text>
+          </TouchableOpacity>
 
-    return {
-      total: monthEvents.length,
-      meetings: monthEvents.filter(e => e.type === 'meeting').length,
-      urgent: monthEvents.filter(e => e.priority === 'urgent').length,
-      allDay: monthEvents.filter(e => e.isAllDay).length,
-    };
+          <TouchableOpacity
+            onPress={() => setShowTemplatesModal(true)}
+            style={[styles.quickActionButton, { backgroundColor: t.card }]}
+          >
+            <Ionicons name="copy-outline" size={16} color={t.text} />
+            <Text style={[styles.quickActionText, { color: t.text }]}>Templates</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setShowAIRescheduleModal(true)}
+            style={[styles.quickActionButton, { backgroundColor: t.card }]}
+          >
+            <Ionicons name="sparkles" size={16} color={t.text} />
+            <Text style={[styles.quickActionText, { color: t.text }]}>IA</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setShowSharedCalendarsModal(true)}
+            style={[styles.quickActionButton, { backgroundColor: t.card }]}
+          >
+            <Ionicons name="share-outline" size={16} color={t.text} />
+            <Text style={[styles.quickActionText, { color: t.text }]}>Compartilhar</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setShowProductivityModal(true)}
+            style={[styles.quickActionButton, { backgroundColor: t.card }]}
+          >
+            <Ionicons name="analytics-outline" size={16} color={t.text} />
+            <Text style={[styles.quickActionText, { color: t.text }]}>Produtividade</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setShowIntegrationsModal(true)}
+            style={[styles.quickActionButton, { backgroundColor: t.card }]}
+          >
+            <Ionicons name="link-outline" size={16} color={t.text} />
+            <Text style={[styles.quickActionText, { color: t.text }]}>Integrações</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
+  );
+
+  const renderAlerts = () => {
+    const alerts = [];
+
+    if (isOffline) {
+      alerts.push({
+        type: 'warning',
+        icon: 'cloud-offline-outline',
+        text: 'Modo offline ativo',
+        action: () => handleSyncOffline(),
+        actionText: 'Sincronizar',
+      });
+    }
+
+    if (pendingSync.events.length > 0) {
+      alerts.push({
+        type: 'info',
+        icon: 'sync-outline',
+        text: `${pendingSync.events.length} alterações pendentes`,
+        action: () => handleSyncOffline(),
+        actionText: 'Sincronizar',
+      });
+    }
+
+    if (widgetData.conflicts.length > 0) {
+      alerts.push({
+        type: 'error',
+        icon: 'alert-circle-outline',
+        text: `${widgetData.conflicts.length} conflitos detectados`,
+        action: () => setShowAIRescheduleModal(true),
+        actionText: 'Resolver',
+      });
+    }
+
+    if (widgetData.suggestions.length > 0) {
+      alerts.push({
+        type: 'success',
+        icon: 'bulb-outline',
+        text: `${widgetData.suggestions.length} sugestões de IA`,
+        action: () => setShowAIRescheduleModal(true),
+        actionText: 'Ver',
+      });
+    }
+
+    if (alerts.length === 0) return null;
+
+    return (
+      <View style={styles.alertsContainer}>
+        {alerts.map((alert, index) => (
+          <View key={index} style={[styles.alertCard, { backgroundColor: getAlertColor(alert.type) }]}>
+            <Ionicons name={alert.icon} size={16} color="#fff" />
+            <Text style={styles.alertText}>{alert.text}</Text>
+            {alert.action && (
+              <TouchableOpacity onPress={alert.action}>
+                <Text style={styles.alertActionText}>{alert.actionText}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ))}
+      </View>
+    );
   };
 
-  const monthStats = getMonthStats();
+  const getAlertColor = (type: string) => {
+    switch (type) {
+      case 'error':
+        return '#ff4757';
+      case 'warning':
+        return '#ffa726';
+      case 'success':
+        return '#4caf50';
+      case 'info':
+        return '#007bff';
+      default:
+        return '#666';
+    }
+  };
+
+  const renderWidgetData = () => (
+    <View style={styles.widgetContainer}>
+      <Text style={[styles.widgetTitle, { color: t.text }]}>Resumo do Dia</Text>
+      
+      <View style={styles.widgetStats}>
+        <View style={styles.widgetStat}>
+          <Text style={[styles.widgetStatNumber, { color: t.primary }]}>
+            {widgetData.todayEvents.length}
+          </Text>
+          <Text style={[styles.widgetStatLabel, { color: t.textLight }]}>Eventos Hoje</Text>
+        </View>
+        
+        <View style={styles.widgetStat}>
+          <Text style={[styles.widgetStatNumber, { color: t.success }]}>
+            {widgetData.upcomingEvents.length}
+          </Text>
+          <Text style={[styles.widgetStatLabel, { color: t.textLight }]}>Próximos</Text>
+        </View>
+        
+        <View style={styles.widgetStat}>
+          <Text style={[styles.widgetStatNumber, { color: t.warning }]}>
+            {formatDuration(stats.averageEventDuration)}
+          </Text>
+          <Text style={[styles.widgetStatLabel, { color: t.textLight }]}>Duração Média</Text>
+        </View>
+      </View>
+
+      {widgetData.todayEvents.length > 0 && (
+        <View style={styles.todayEventsContainer}>
+          <Text style={[styles.todayEventsTitle, { color: t.text }]}>Eventos de Hoje</Text>
+          <FlatList
+            data={widgetData.todayEvents.slice(0, 3)}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <View style={[styles.todayEventItem, { backgroundColor: t.card }]}>
+                <View style={styles.todayEventTime}>
+                  <Text style={[styles.todayEventTimeText, { color: t.text }]}>
+                    {item.startTime.toLocaleTimeString('pt-BR', { 
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                    })}
+                  </Text>
+                </View>
+                <View style={styles.todayEventInfo}>
+                  <Text style={[styles.todayEventTitle, { color: t.text }]} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  {item.location && (
+                    <Text style={[styles.todayEventLocation, { color: t.textLight }]} numberOfLines={1}>
+                      📍 {item.location}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            )}
+            showsVerticalScrollIndicator={false}
+          />
+        </View>
+      )}
+    </View>
+  );
+
+  if (loading) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: t.background }]}>
+        <Text style={[styles.loadingText, { color: t.text }]}>Carregando agenda...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.errorContainer, { backgroundColor: t.background }]}>
+        <Text style={[styles.errorText, { color: t.text }]}>{error}</Text>
+        <TouchableOpacity
+          style={[styles.retryButton, { backgroundColor: t.primary }]}
+          onPress={loadEvents}
+        >
+          <Text style={styles.retryButtonText}>Tentar Novamente</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: t.background }]}>
-      {/* Header */}
       <View style={[styles.header, { backgroundColor: t.card }]}>
         <View style={styles.headerTop}>
           <Text style={[styles.title, { color: t.text }]}>Agenda</Text>
           <View style={styles.headerActions}>
-            <TouchableOpacity 
-              onPress={() => setShowSyncManager(true)}
-              style={[styles.syncButton, { backgroundColor: t.primary }]}
+            <TouchableOpacity
+              onPress={() => setShowVoiceModal(true)}
+              style={[styles.headerActionButton, { backgroundColor: t.background }]}
             >
-              <Ionicons name="sync" size={20} color="#fff" />
+              <Ionicons name="mic" size={20} color={t.text} />
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setShowSuggestions(true)}
               style={[styles.addButton, { backgroundColor: t.primary }]}
             >
@@ -245,60 +461,25 @@ export default function Agenda() {
           </View>
         </View>
 
-        {/* Navegação */}
-        <View style={styles.navigation}>
-          <TouchableOpacity onPress={() => navigateDate('prev')} style={styles.navButton}>
-            <Ionicons name="chevron-back" size={24} color={t.text} />
-          </TouchableOpacity>
-          
-          <TouchableOpacity onPress={goToToday} style={styles.todayButton}>
-            <Text style={[styles.todayText, { color: t.primary }]}>Hoje</Text>
-          </TouchableOpacity>
-          
-          <Text style={[styles.dateText, { color: t.text }]}>
-            {view === 'month' && currentDate.toLocaleDateString('pt-BR', { 
-              month: 'long', 
-              year: 'numeric' 
-            })}
-            {view === 'week' && `${currentDate.toLocaleDateString('pt-BR', { 
-              day: 'numeric', 
-              month: 'short' 
-            })} - ${new Date(currentDate.getTime() + 6 * 24 * 60 * 60 * 1000).toLocaleDateString('pt-BR', { 
-              day: 'numeric', 
-              month: 'short' 
-            })}`}
-            {view === 'day' && currentDate.toLocaleDateString('pt-BR', { 
-              weekday: 'long', 
-              day: 'numeric', 
-              month: 'long' 
-            })}
-          </Text>
-          
-          <TouchableOpacity onPress={() => navigateDate('next')} style={styles.navButton}>
-            <Ionicons name="chevron-forward" size={24} color={t.text} />
-          </TouchableOpacity>
-        </View>
-
         {/* View Selector */}
         <View style={styles.viewSelector}>
           {(['month', 'week', 'day'] as CalendarView[]).map((viewType) => (
             <TouchableOpacity
               key={viewType}
-              onPress={() => setView(viewType)}
               style={[
                 styles.viewButton,
-                { backgroundColor: t.background },
-                view === viewType && { backgroundColor: t.primary + '20' }
+                view === viewType && { backgroundColor: t.primary }
               ]}
+              onPress={() => setView(viewType)}
             >
               <Ionicons 
                 name={getViewIcon(viewType)} 
-                size={20} 
-                color={view === viewType ? t.primary : t.textLight} 
+                size={16} 
+                color={view === viewType ? '#fff' : t.text} 
               />
               <Text style={[
                 styles.viewButtonText,
-                { color: view === viewType ? t.primary : t.textLight }
+                { color: view === viewType ? '#fff' : t.text }
               ]}>
                 {getViewLabel(viewType)}
               </Text>
@@ -309,62 +490,61 @@ export default function Agenda() {
         {/* Estatísticas */}
         <View style={styles.stats}>
           <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: t.text }]}>{monthStats.total}</Text>
-            <Text style={[styles.statLabel, { color: t.textLight }]}>Eventos</Text>
+            <Text style={[styles.statNumber, { color: t.text }]}>{stats.totalEvents}</Text>
+            <Text style={[styles.statLabel, { color: t.textLight }]}>Total</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: t.success }]}>{monthStats.meetings}</Text>
-            <Text style={[styles.statLabel, { color: t.textLight }]}>Reuniões</Text>
+            <Text style={[styles.statNumber, { color: t.success }]}>
+              {formatDuration(stats.totalDuration)}
+            </Text>
+            <Text style={[styles.statLabel, { color: t.textLight }]}>Tempo Total</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: '#FF3B30' }]}>{monthStats.urgent}</Text>
-            <Text style={[styles.statLabel, { color: t.textLight }]}>Urgentes</Text>
+            <Text style={[styles.statNumber, { color: '#FF3B30' }]}>
+              {stats.conflictCount}
+            </Text>
+            <Text style={[styles.statLabel, { color: t.textLight }]}>Conflitos</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: t.warning }]}>{monthStats.allDay}</Text>
-            <Text style={[styles.statLabel, { color: t.textLight }]}>Dia Inteiro</Text>
+            <Text style={[styles.statNumber, { color: t.warning }]}>
+              {stats.rescheduleCount}
+            </Text>
+            <Text style={[styles.statLabel, { color: t.textLight }]}>Reagendamentos</Text>
           </View>
         </View>
+
+        {renderQuickActions()}
+        {renderAlerts()}
       </View>
+
+      {/* Widget de Resumo */}
+      {renderWidgetData()}
 
       {/* Conteúdo baseado na view */}
       <View style={styles.content}>
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <Text style={[styles.loadingText, { color: t.textLight }]}>Carregando agenda...</Text>
-          </View>
-        ) : error ? (
-          <View style={styles.errorContainer}>
-            <Text style={[styles.errorText, { color: t.error }]}>{error}</Text>
-            <TouchableOpacity onPress={loadEvents} style={[styles.retryButton, { backgroundColor: t.primary }]}>
-              <Text style={[styles.retryButtonText, { color: '#fff' }]}>Tentar Novamente</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <>
-            {view === 'month' && (
-              <MonthView
-                year={currentDate.getFullYear()}
-                month={currentDate.getMonth()}
-                onDatePress={handleDatePress}
-                onEventPress={handleEventPress}
-              />
-            )}
-
-            {view === 'week' && (
-              <WeekView
-                onTaskPress={handleEventPress}
-              />
-            )}
-
-            {view === 'day' && (
-              <DayView
-                date={currentDate}
-                onEventPress={handleEventPress}
-                onTimeSlotPress={handleTimeSlotPress}
-              />
-            )}
-          </>
+        {view === 'month' && (
+          <MonthView 
+            events={events}
+            currentDate={currentDate}
+            onDateSelect={setCurrentDate}
+            onEventPress={(event) => setSelectedEvent(event)}
+          />
+        )}
+        {view === 'week' && (
+          <WeekView 
+            events={events}
+            currentDate={currentDate}
+            onDateSelect={setCurrentDate}
+            onEventPress={(event) => setSelectedEvent(event)}
+          />
+        )}
+        {view === 'day' && (
+          <DayView 
+            events={events}
+            currentDate={currentDate}
+            onDateSelect={setCurrentDate}
+            onEventPress={(event) => setSelectedEvent(event)}
+          />
         )}
       </View>
 
@@ -372,15 +552,45 @@ export default function Agenda() {
       <AgendaSuggestions
         visible={showSuggestions}
         onClose={() => setShowSuggestions(false)}
-        onSelectTime={handleSelectTime}
-        duration={60}
-        priority="medium"
-        eventType="event"
+        onEventCreate={handleCreateEvent}
       />
 
       <SyncManager
         visible={showSyncManager}
         onClose={() => setShowSyncManager(false)}
+      />
+
+      <VoiceRecognitionModal
+        visible={showVoiceModal}
+        onClose={() => setShowVoiceModal(false)}
+        onEventCreated={handleVoiceEventCreated}
+      />
+
+      <EventTemplatesModal
+        visible={showTemplatesModal}
+        onClose={() => setShowTemplatesModal(false)}
+        onSelectTemplate={handleTemplateSelect}
+      />
+
+      <AIRescheduleModal
+        visible={showAIRescheduleModal}
+        onClose={() => setShowAIRescheduleModal(false)}
+        eventId={selectedEvent?.id}
+      />
+
+      <SharedCalendarsModal
+        visible={showSharedCalendarsModal}
+        onClose={() => setShowSharedCalendarsModal(false)}
+      />
+
+      <ProductivityAnalysisModal
+        visible={showProductivityModal}
+        onClose={() => setShowProductivityModal(false)}
+      />
+
+      <ExternalIntegrationsModal
+        visible={showIntegrationsModal}
+        onClose={() => setShowIntegrationsModal(false)}
       />
     </View>
   );
@@ -393,7 +603,7 @@ const styles = StyleSheet.create({
   header: {
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
+    borderBottomColor: '#e9ecef',
   },
   headerTop: {
     flexDirection: 'row',
@@ -409,10 +619,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
-  syncButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  headerActionButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -423,33 +633,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  navigation: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  navButton: {
-    padding: 8,
-  },
-  todayButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,122,255,0.1)',
-  },
-  todayText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  dateText: {
-    fontSize: 16,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
   viewSelector: {
     flexDirection: 'row',
-    gap: 8,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 4,
     marginBottom: 16,
   },
   viewButton: {
@@ -459,7 +647,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 8,
+    borderRadius: 6,
     gap: 6,
   },
   viewButtonText: {
@@ -469,17 +657,117 @@ const styles = StyleSheet.create({
   stats: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    marginBottom: 16,
   },
   statItem: {
     alignItems: 'center',
   },
   statNumber: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
   },
   statLabel: {
     fontSize: 12,
     marginTop: 2,
+  },
+  quickActionsContainer: {
+    marginBottom: 12,
+  },
+  quickActionsContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  quickActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  quickActionText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  alertsContainer: {
+    gap: 8,
+  },
+  alertCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 8,
+  },
+  alertText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#fff',
+    flex: 1,
+  },
+  alertActionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  widgetContainer: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  widgetTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  widgetStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 16,
+  },
+  widgetStat: {
+    alignItems: 'center',
+  },
+  widgetStatNumber: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  widgetStatLabel: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  todayEventsContainer: {
+    marginTop: 8,
+  },
+  todayEventsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  todayEventItem: {
+    flexDirection: 'row',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 6,
+  },
+  todayEventTime: {
+    marginRight: 12,
+  },
+  todayEventTimeText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  todayEventInfo: {
+    flex: 1,
+  },
+  todayEventTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  todayEventLocation: {
+    fontSize: 12,
   },
   content: {
     flex: 1,
@@ -496,19 +784,20 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
+    padding: 20,
   },
   errorText: {
     fontSize: 16,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   retryButton: {
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: 8,
   },
   retryButtonText: {
+    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
