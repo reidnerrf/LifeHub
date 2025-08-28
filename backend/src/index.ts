@@ -18,6 +18,7 @@ mongoose.connect(MONGO_URL).then(() => logger.info('Mongo connected')).catch((er
 
 // Models
 const TaskSchema = new Schema({
+  userId: { type: String, index: true },
   title: { type: String, required: true },
   completed: { type: Boolean, default: false },
   dueDate: { type: Date },
@@ -25,6 +26,7 @@ const TaskSchema = new Schema({
   tags: [{ type: String }],
 }, { timestamps: true });
 const NoteSchema = new Schema({
+  userId: { type: String, index: true },
   title: { type: String, required: true },
   content: { type: String, default: '' },
   tags: [{ type: String }],
@@ -37,11 +39,13 @@ const Note = model('Note', NoteSchema);
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // Tasks CRUD
-app.get('/tasks', async (_req, res) => {
-  res.json(await Task.find().sort({ createdAt: -1 }));
+app.get('/tasks', async (req, res) => {
+  const userId = String(req.header('x-user-id') || 'public');
+  res.json(await Task.find({ userId }).sort({ createdAt: -1 }));
 });
 app.post('/tasks', async (req, res) => {
-  const t = await Task.create(req.body);
+  const userId = String(req.header('x-user-id') || 'public');
+  const t = await Task.create({ ...req.body, userId });
   res.status(201).json(t);
 });
 app.patch('/tasks/:id', async (req, res) => {
@@ -54,11 +58,13 @@ app.delete('/tasks/:id', async (req, res) => {
 });
 
 // Notes CRUD
-app.get('/notes', async (_req, res) => {
-  res.json(await Note.find().sort({ createdAt: -1 }));
+app.get('/notes', async (req, res) => {
+  const userId = String(req.header('x-user-id') || 'public');
+  res.json(await Note.find({ userId }).sort({ createdAt: -1 }));
 });
 app.post('/notes', async (req, res) => {
-  const n = await Note.create(req.body);
+  const userId = String(req.header('x-user-id') || 'public');
+  const n = await Note.create({ ...req.body, userId });
   res.status(201).json(n);
 });
 app.patch('/notes/:id', async (req, res) => {
