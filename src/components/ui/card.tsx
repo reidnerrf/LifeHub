@@ -2,16 +2,24 @@ import * as React from "react";
 
 import { cn } from "./utils";
 
-function Card({ className, ...props }: React.ComponentProps<"div">) {
+function Card({ className, ...props }: React.ComponentProps<"div"> & { ribbon?: React.ReactNode }) {
+  const { ribbon, ...rest } = props as any;
   return (
-    <div
-      data-slot="card"
-      className={cn(
-        "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border",
-        className,
+    <div className="relative">
+      {ribbon && (
+        <div className="absolute -top-2 -right-2 z-10">
+          {ribbon}
+        </div>
       )}
-      {...props}
-    />
+      <div
+        data-slot="card"
+        className={cn(
+          "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border",
+          className,
+        )}
+        {...(rest as any)}
+      />
+    </div>
   );
 }
 

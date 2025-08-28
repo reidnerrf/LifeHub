@@ -5,6 +5,8 @@ import GlobalSearch from './components/GlobalSearch';
 import { LoadingSpinner } from './components/ui/skeleton-components';
 import { useNavigationGestures } from './components/hooks/useGestures';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from './components/ui/sheet';
+import { storage, KEYS } from './services/storage';
+import { api } from './services/api';
 
 // Lazy load components for better performance
 const SplashScreen = lazy(() => import('./components/SplashScreen'));
@@ -33,18 +35,21 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [tabHistory, setTabHistory] = useState<string[]>(['dashboard']);
+  const [isPremium, setIsPremium] = useState<boolean>(() => !!storage.get(KEYS.subscription));
+  const [fontScale, setFontScale] = useState<number>(() => storage.get<number>(KEYS.accessibilityFontScale) || 1);
 
-  // Auto detect dark mode
+  // Auto detect dark mode or use persisted theme
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    setIsDarkMode(mediaQuery.matches);
-    
-    const handleChange = (e: MediaQueryListEvent) => {
-      setIsDarkMode(e.matches);
-    };
-    
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
+    const persisted = storage.get<string>(KEYS.theme);
+    if (persisted === 'dark') setIsDarkMode(true);
+    else if (persisted === 'light') setIsDarkMode(false);
+    else {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      setIsDarkMode(mediaQuery.matches);
+      const handleChange = (e: MediaQueryListEvent) => setIsDarkMode(e.matches);
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
   }, []);
 
   // Apply dark mode class
@@ -55,6 +60,34 @@ export default function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [isDarkMode]);
+
+  // Apply font scale and high contrast
+  useEffect(() => {
+    document.documentElement.style.setProperty('--lh-font-scale', String(fontScale));
+    const highContrast = storage.get<boolean>(KEYS.accessibilityHighContrast);
+    if (highContrast) document.documentElement.classList.add('hc'); else document.documentElement.classList.remove('hc');
+  }, [fontScale]);
+
+  // Finalize OAuth if code present in URL hash
+  useEffect(() => {
+    const hash = window.location.hash || '';
+    const actionMatch = hash.match(/action=([^&]+)/);
+    if (actionMatch) {
+      const action = decodeURIComponent(actionMatch[1]);
+      if (action === 'start_focus') setActiveTab('focus');
+      if (action === 'add_task') { setActiveTab('tasks'); setShowQuickAdd(true); }
+      if (action === 'next_event') setActiveTab('calendar');
+    }
+    const m = hash.match(/google_code=([^&]+)/);
+    if (m) {
+      const code = decodeURIComponent(m[1]);
+      api.googleOauthCallback({ code }).then(() => {
+        history.replaceState(null, '', window.location.pathname);
+      }).catch(() => {
+        history.replaceState(null, '', window.location.pathname);
+      });
+    }
+  }, []);
 
   // Check if user has completed onboarding
   useEffect(() => {
@@ -462,6 +495,23 @@ export default function App() {
         {/* Status Bar Spacer */}
         <div className="safe-area-top" />
         
+        {/* Trial badge */}
+        {(() => {
+          try {
+            const sub = storage.get<any>(KEYS.subscription);
+            if (!sub || sub.plan !== 'trial') return null;
+            const started = new Date(sub.startedAt || Date.now());
+            const duration = Number(sub.durationDays || 7);
+            const end = new Date(started.getTime() + duration * 24 * 60 * 60 * 1000);
+            const daysLeft = Math.max(0, Math.ceil((end.getTime() - Date.now()) / (24*60*60*1000)));
+            return (
+              <div className="fixed top-12 left-1/2 -translate-x-1/2 z-30 px-3 py-1 rounded-full bg-[var(--app-yellow)] text-white text-xs shadow">
+                Trial: {daysLeft} dias restantes
+              </div>
+            );
+          } catch { return null; }
+        })()}
+
         {/* Global Search Button */}
         <button
           onClick={() => setShowGlobalSearch(true)}

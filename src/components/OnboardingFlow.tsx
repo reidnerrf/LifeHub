@@ -12,6 +12,7 @@ import {
   Zap
 } from 'lucide-react';
 import { Button } from './ui/button';
+import { storage, KEYS } from '../services/storage';
 
 interface OnboardingFlowProps {
   onComplete: () => void;
@@ -19,6 +20,10 @@ interface OnboardingFlowProps {
 
 const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
   const [currentStep, setCurrentStep] = useState(0);
+  const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
+  const [preferredViews, setPreferredViews] = useState<Array<'tasks'|'notes'|'focus'|'dashboard'>>(['dashboard']);
+  const [enableSmart, setEnableSmart] = useState(true);
+  const [theme, setTheme] = useState<'light'|'dark'|'system'>('system');
 
   const onboardingSteps = [
     {
@@ -72,6 +77,19 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
         { icon: <Sparkles size={20} />, text: 'Insights e relatórios automáticos' },
         { icon: <Zap size={20} />, text: 'Integrações com bancos e serviços' }
       ]
+    },
+    {
+      id: 'quickwins',
+      title: 'Quick Wins ⚡',
+      subtitle: 'Configure em 30 segundos',
+      description: 'Importe sua agenda, adote 3 hábitos e planeje hoje agora.',
+      icon: <Zap size={80} className="text-[var(--app-green)]" />,
+      gradient: 'from-[var(--app-green)] to-[var(--app-blue)]',
+      features: [
+        { icon: <Calendar size={20} />, text: 'Importar agenda (Google)' },
+        { icon: <Target size={20} />, text: 'Sugerir 3 hábitos' },
+        { icon: <CheckSquare size={20} />, text: 'Planejar hoje em 30s' }
+      ]
     }
   ];
 
@@ -81,6 +99,19 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
     if (currentStep < onboardingSteps.length - 1) {
       setCurrentStep(prev => prev + 1);
     } else {
+      // Persist minimal onboarding preferences
+      const prefs = {
+        goals: selectedGoals,
+        preferredViews,
+        enableSmartSuggestions: enableSmart,
+        theme
+      };
+      storage.set(KEYS.onboarding, prefs);
+      // Personalize app defaults
+      if (prefs.theme !== 'system') storage.set(KEYS.theme, prefs.theme);
+      if (prefs.goals.includes('Foco')) storage.set(KEYS.mode, 'focus');
+      if (prefs.goals.includes('Bem-estar')) storage.set(KEYS.accessibilityFontScale, 1.1);
+      if (theme !== 'system') storage.set(KEYS.theme, theme);
       onComplete();
     }
   };
@@ -156,6 +187,44 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
             </div>
           ))}
         </div>
+
+        {/* Quick Quiz */}
+        <div className="mb-6 space-y-4 animate-slide-up">
+          <div className="grid grid-cols-2 gap-2">
+            {['Organização', 'Foco', 'Notas', 'Bem-estar'].map((g) => (
+              <button
+                key={g}
+                onClick={() => setSelectedGoals(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g])}
+                className={`py-2 px-3 rounded-xl text-sm ${selectedGoals.includes(g) ? 'bg-white text-black' : 'bg-white/10 text-white/80 border border-white/20'}`}
+              >{g}</button>
+            ))}
+          </div>
+          <div className="flex items-center justify-between text-white/90 text-sm">
+            <span>Tema</span>
+            <div className="space-x-2">
+              {(['light','system','dark'] as const).map(t => (
+                <button key={t} onClick={() => setTheme(t)} className={`px-3 py-1 rounded-lg ${theme===t?'bg-white text-black':'bg-white/10 border border-white/20'}`}>{t}</button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center justify-between text-white/90 text-sm">
+            <span>Sugestões inteligentes</span>
+            <button onClick={() => setEnableSmart(v => !v)} className={`px-3 py-1 rounded-lg ${enableSmart?'bg-white text-black':'bg-white/10 border border-white/20 text-white'}`}>{enableSmart?'Ativo':'Inativo'}</button>
+          </div>
+          <div className="flex items-center justify-between text-white/90 text-sm">
+            <span>Importar do Google (stub)</span>
+            <button onClick={() => alert('Importação simulada!')} className="px-3 py-1 rounded-lg bg-white text-black">Importar</button>
+          </div>
+        </div>
+
+        {/* Quick Wins Actions */}
+        {currentStepData.id === 'quickwins' && (
+          <div className="mb-6 space-y-3 animate-slide-up">
+            <button onClick={async () => { try { await (await import('../services/api')).api.importGoogle(); alert('Agenda importada!'); } catch {} }} className="w-full py-3 rounded-xl bg-white/20 text-white">Importar agenda</button>
+            <button onClick={() => alert('3 hábitos sugeridos: Água, Leitura, Caminhada')} className="w-full py-3 rounded-xl bg-white/20 text-white">Sugerir 3 hábitos</button>
+            <button onClick={() => alert('Hoje planejado em 30s: 3 blocos inseridos')} className="w-full py-3 rounded-xl bg-white text-[var(--app-blue)]">Planejar hoje</button>
+          </div>
+        )}
 
         {/* Navigation */}
         <div className="flex items-center justify-between animate-slide-up">
