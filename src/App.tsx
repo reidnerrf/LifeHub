@@ -5,6 +5,7 @@ import GlobalSearch from './components/GlobalSearch';
 import { LoadingSpinner } from './components/ui/skeleton-components';
 import { useNavigationGestures } from './components/hooks/useGestures';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from './components/ui/sheet';
+import { storage, KEYS } from './services/storage';
 
 // Lazy load components for better performance
 const SplashScreen = lazy(() => import('./components/SplashScreen'));
@@ -34,17 +35,18 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [tabHistory, setTabHistory] = useState<string[]>(['dashboard']);
 
-  // Auto detect dark mode
+  // Auto detect dark mode or use persisted theme
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    setIsDarkMode(mediaQuery.matches);
-    
-    const handleChange = (e: MediaQueryListEvent) => {
-      setIsDarkMode(e.matches);
-    };
-    
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
+    const persisted = storage.get<string>(KEYS.theme);
+    if (persisted === 'dark') setIsDarkMode(true);
+    else if (persisted === 'light') setIsDarkMode(false);
+    else {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      setIsDarkMode(mediaQuery.matches);
+      const handleChange = (e: MediaQueryListEvent) => setIsDarkMode(e.matches);
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
   }, []);
 
   // Apply dark mode class

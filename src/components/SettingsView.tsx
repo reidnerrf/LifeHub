@@ -22,6 +22,7 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Switch } from './ui/switch';
 import PremiumModal from './PremiumModal';
+import { storage, KEYS } from '../services/storage';
 
 interface SettingsViewProps {
   onBack: () => void;
@@ -30,6 +31,7 @@ interface SettingsViewProps {
 const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [showPremium, setShowPremium] = useState(false);
+  const [user, setUser] = useState(() => storage.get<any>(KEYS.user) || { id: 'guest', name: 'Convidado' });
 
   const [notificationSettings, setNotificationSettings] = useState({
     pushEnabled: true,
@@ -233,6 +235,34 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
     </div>
   );
 
+  const renderGeneral = () => (
+    <div className="space-y-6">
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <h3 className="font-medium text-[var(--app-text)] mb-4">Usuário</h3>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm text-[var(--app-text)] font-medium">{user.name}</div>
+            <div className="text-xs text-[var(--app-text-light)]">ID: {user.id}</div>
+          </div>
+          <Button
+            onClick={() => {
+              const name = prompt('Nome do usuário', user.name) || user.name;
+              const updated = { ...user, name };
+              setUser(updated);
+              storage.set(KEYS.user, updated);
+            }}
+          >Editar</Button>
+        </div>
+      </Card>
+
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <h3 className="font-medium text-[var(--app-text)] mb-2">Importar Google (stub)</h3>
+        <p className="text-sm text-[var(--app-text-light)] mb-4">Simula uma importação de eventos e tarefas.</p>
+        <Button onClick={() => alert('Importação Google simulada!')}>Importar agora</Button>
+      </Card>
+    </div>
+  );
+
   const renderPremium = () => (
     <div className="space-y-6">
       <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
@@ -369,14 +399,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
             </p>
           </Card>
         )}
-        {selectedSection === 'general' && (
-          <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
-            <h3 className="font-medium text-[var(--app-text)] mb-4">Em breve...</h3>
-            <p className="text-sm text-[var(--app-text-light)]">
-              Configurações gerais serão implementadas em breve.
-            </p>
-          </Card>
-        )}
+        {selectedSection === 'general' && renderGeneral()}
       </div>
     );
   }
