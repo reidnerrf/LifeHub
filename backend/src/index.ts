@@ -70,6 +70,18 @@ const HabitSchema = new Schema({
   target: { type: Number, default: 1 }
 }, { timestamps: true });
 
+const PomodoroSessionSchema = new Schema({
+  userId: { type: String, index: true },
+  taskTitle: { type: String, default: '' },
+  status: { type: String, enum: ['active', 'paused', 'completed'], default: 'active' },
+  duration: { type: Number, default: 25 }, // minutos
+  remainingTime: { type: Number, default: 25 },
+  startTime: { type: Date, default: Date.now },
+  endTime: { type: Date },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+}, { timestamps: true });
+
 const CheckinSchema = new Schema({
   userId: { type: String, index: true },
   habitId: { type: String, index: true },
@@ -111,6 +123,7 @@ const Note = model('Note', NoteSchema);
 const Suggestion = model('Suggestion', SuggestionSchema);
 const Event = model('Event', EventSchema);
 const Habit = model('Habit', HabitSchema);
+const PomodoroSession = model('PomodoroSession', PomodoroSessionSchema);
 const Checkin = model('Checkin', CheckinSchema);
 const Transaction = model('Transaction', TransactionSchema);
 const UserStats = model('UserStats', UserStatsSchema);
@@ -749,19 +762,143 @@ app.post('/billing/cancel', (req: any, res) => {
 // Voice Assistants Integration Stubs
 function parseVoiceCommand(text: string) {
   const t = (text || '').toLowerCase();
+  
+  // Intents existentes
   if (t.includes('iniciar foco') || t.includes('start focus')) return { intent: 'start_focus' };
   if (t.startsWith('adicionar tarefa') || t.startsWith('add task')) {
     const title = t.replace(/^(adicionar tarefa|add task)/, '').trim();
     return { intent: 'add_task', title: title || 'Tarefa' };
   }
   if (t.includes('próximo evento') || t.includes('next event')) return { intent: 'next_event' };
+  
+  // Novos intents solicitados
+  if (t.startsWith('adicionar nota') || t.startsWith('add note')) {
+    const content = t.replace(/^(adicionar nota|add note)/, '').trim();
+    return { intent: 'add_note', content: content || 'Nova nota' };
+  }
+  if (t.includes('iniciar pausa') || t.includes('start break')) return { intent: 'start_break' };
+  if (t.includes('próxima tarefa') || t.includes('next task')) return { intent: 'next_task' };
+  if (t.startsWith('adicionar evento') || t.startsWith('add event')) {
+    const title = t.replace(/^(adicionar evento|add event)/, '').trim();
+    return { intent: 'add_event', title: title || 'Novo evento' };
+  }
+  if (t.startsWith('adicionar hábito') || t.startsWith('add habit')) {
+    const title = t.replace(/^(adicionar hábito|add habit)/, '').trim();
+    return { intent: 'add_habit', title: title || 'Novo hábito' };
+  }
+  if (t.includes('pausar pomodoro') || t.includes('pause pomodoro')) return { intent: 'pause_pomodoro' };
+  if (t.includes('resumir pomodoro') || t.includes('resume pomodoro')) return { intent: 'resume_pomodoro' };
+  if (t.includes('finalizar pomodoro') || t.includes('finish pomodoro')) return { intent: 'finish_pomodoro' };
+  
   return { intent: 'unknown' };
 }
 
 app.post('/assistant/voice/command', async (req: any, res) => {
   const { text = '', locale = 'pt-BR' } = req.body || {};
   const parsed = parseVoiceCommand(text);
-  res.json({ ok: true, parsed, locale });
+  
+  // Executar ação baseada no intent
+  try {
+    let result = null;
+    const userId = String(req.userId || 'user1'); // Fallback para desenvolvimento
+    
+    switch (parsed.intent) {
+      case 'add_task':
+        result = await Task.create({
+          userId,
+          title: parsed.title,
+          description: '',
+          priority: 'medium',
+          status: 'pending',
+          dueDate: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        break;
+        
+      case 'add_note':
+        result = await Note.create({
+          userId,
+          title: parsed.content.substring(0, 50),
+          content: parsed.content,
+          type: 'text',
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        break;
+        
+      case 'add_event':
+        result = await Event.create({
+          userId,
+          title: parsed.title,
+          description: '',
+          startTime: new Date(),
+          endTime: new Date(Date.now() + 60 * 60 * 1000), // 1 hora
+          location: '',
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        break;
+        
+      case 'add_habit':
+        result = await Habit.create({
+          userId,
+          title: parsed.title,
+          description: '',
+          frequency: 'daily',
+          targetCount: 1,
+          currentCount: 0,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        break;
+        
+      case 'start_focus':
+        result = { message: 'Sessão de foco iniciada', duration: 25 };
+        break;
+        
+      case 'start_break':
+        result = { message: 'Pausa iniciada', duration: 5 };
+        break;
+        
+      case 'next_task':
+        const nextTask = await Task.findOne({ userId, status: 'pending' }).sort({ priority: -1, createdAt: 1 });
+        result = nextTask || { message: 'Nenhuma tarefa pendente encontrada' };
+        break;
+        
+      case 'pause_pomodoro':
+        result = { message: 'Pomodoro pausado' };
+        break;
+        
+      case 'resume_pomodoro':
+        result = { message: 'Pomodoro resumido' };
+        break;
+        
+      case 'finish_pomodoro':
+        result = { message: 'Pomodoro finalizado' };
+        break;
+        
+      default:
+        result = { message: 'Comando não reconhecido' };
+    }
+    
+    res.json({ 
+      ok: true, 
+      parsed, 
+      locale, 
+      result,
+      feedback: `Ação executada: ${parsed.intent}` 
+    });
+  } catch (error) {
+    console.error('Error executing voice command:', error);
+    res.json({ 
+      ok: false, 
+      parsed, 
+      locale, 
+      error: error.message,
+      feedback: 'Erro ao executar comando' 
+    });
+  }
 });
 
 // Alexa webhook (ASK)
@@ -789,6 +926,106 @@ app.get('/integrations/siri/shortcut', (req: any, res) => {
 app.get('/orchestrator/opportunities', async (req: any, res) => {
   const { minutes = 30 } = req.query as any;
   res.json([{ id: 'opp1', title: `Você tem ${minutes}min livres`, suggestion: 'Adiantar tarefa de alta prioridade' }]);
+});
+
+// Timeline unificada de hoje
+app.get('/today/items', async (req: any, res) => {
+  try {
+    const userId = String(req.userId || 'user1');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    // Buscar tarefas de hoje
+    const tasks = await Task.find({
+      userId,
+      dueDate: { $gte: today, $lt: tomorrow },
+      status: { $ne: 'completed' }
+    }).sort({ priority: -1, createdAt: 1 });
+    
+    // Buscar eventos de hoje
+    const events = await Event.find({
+      userId,
+      startTime: { $gte: today, $lt: tomorrow }
+    }).sort({ startTime: 1 });
+    
+    // Buscar hábitos do dia
+    const habits = await Habit.find({
+      userId,
+      frequency: 'daily'
+    });
+    
+    // Buscar sessão de Pomodoro ativa
+    const activePomodoro = await PomodoroSession.findOne({
+      userId,
+      status: 'active'
+    });
+    
+    // Combinar todos os itens em uma timeline
+    const timelineItems = [];
+    
+    // Adicionar tarefas
+    tasks.forEach(task => {
+      timelineItems.push({
+        id: `task_${task._id}`,
+        type: 'task',
+        title: task.title,
+        time: task.dueDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        description: task.description,
+        priority: task.priority,
+        status: task.status
+      });
+    });
+    
+    // Adicionar eventos
+    events.forEach(event => {
+      timelineItems.push({
+        id: `event_${event._id}`,
+        type: 'event',
+        title: event.title,
+        time: event.startTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        description: event.description,
+        location: event.location
+      });
+    });
+    
+    // Adicionar hábitos
+    habits.forEach(habit => {
+      timelineItems.push({
+        id: `habit_${habit._id}`,
+        type: 'habit',
+        title: habit.title,
+        time: 'Hoje',
+        description: `${habit.currentCount}/${habit.targetCount} completos`,
+        progress: habit.currentCount / habit.targetCount
+      });
+    });
+    
+    // Adicionar Pomodoro ativo
+    if (activePomodoro) {
+      timelineItems.push({
+        id: `pomodoro_${activePomodoro._id}`,
+        type: 'pomodoro',
+        title: 'Sessão de Foco Ativa',
+        time: `${activePomodoro.remainingTime}min restantes`,
+        description: activePomodoro.taskTitle || 'Foco geral'
+      });
+    }
+    
+    // Ordenar por hora (se disponível) ou por tipo
+    timelineItems.sort((a, b) => {
+      if (a.time !== 'Hoje' && b.time !== 'Hoje') {
+        return a.time.localeCompare(b.time);
+      }
+      return 0;
+    });
+    
+    res.json(timelineItems);
+  } catch (error) {
+    console.error('Error fetching today items:', error);
+    res.status(500).json({ error: 'Erro ao buscar itens de hoje' });
+  }
 });
 
 // Enhanced Notifications targeting with smart timing

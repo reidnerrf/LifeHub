@@ -1,0 +1,45 @@
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Ionicons } from '@expo/vector-icons';
+
+import Home from '../screens/Home';
+import Tasks from '../screens/Tasks';
+import Focus from '../screens/Focus';
+import Notes from '../screens/Notes';
+
+const Tab = createBottomTabNavigator();
+
+export default function RootNavigator() {
+  return (
+    <NavigationContainer>
+      <Tab.Navigator
+        screenOptions={({ route }) => ({
+          tabBarIcon: ({ focused, color, size }) => {
+            let iconName;
+
+            if (route.name === 'Home') {
+              iconName = focused ? 'home' : 'home-outline';
+            } else if (route.name === 'Tasks') {
+              iconName = focused ? 'list' : 'list-outline';
+            } else if (route.name === 'Focus') {
+              iconName = focused ? 'timer' : 'timer-outline';
+            } else if (route.name === 'Notes') {
+              iconName = focused ? 'document-text' : 'document-text-outline';
+            }
+
+            return <Ionicons name={iconName} size={size} color={color} />;
+          },
+          tabBarActiveTintColor: '#007AFF',
+          tabBarInactiveTintColor: 'gray',
+          headerShown: false,
+        })}
+      >
+        <Tab.Screen name="Home" component={Home} />
+        <Tab.Screen name="Tasks" component={Tasks} />
+        <Tab.Screen name="Focus" component={Focus} />
+        <Tab.Screen name="Notes" component={Notes} />
+      </Tab.Navigator>
+    </NavigationContainer>
+  );
+}
