@@ -36,6 +36,7 @@ export const KEYS = {
   habits: 'habits',
   bills: 'bills',
   receivables: 'receivables',
-  transactions: 'transactions'
+  transactions: 'transactions',
+  subscription: 'subscription'
 } as const;
 

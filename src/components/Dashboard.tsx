@@ -34,6 +34,7 @@ import { api } from '../services/api';
 const Dashboard: React.FC = () => {
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
   const [showPremium, setShowPremium] = useState(false);
+  const [isPremium, setIsPremium] = useState<boolean>(() => !!storage.get(KEYS.subscription));
   const [toasts, setToasts] = useState<Array<{id: string; message: string; type: 'success' | 'info' | 'error'}>>([]);
   const [showReschedule, setShowReschedule] = useState(false);
   const [rescheduleSuggestions, setRescheduleSuggestions] = useState<any[]>([]);
@@ -345,7 +346,9 @@ const Dashboard: React.FC = () => {
               <Sparkles size={18} className="text-[var(--app-blue)]" />
               <h3 className="font-medium text-[var(--app-text)]">Sugestões da IA</h3>
             </div>
-            <button onClick={() => setShowPremium(true)} className="text-xs px-3 py-1 rounded-lg bg-[var(--app-blue)] text-white">Desbloquear Premium</button>
+            {!isPremium && (
+              <button onClick={() => setShowPremium(true)} className="text-xs px-3 py-1 rounded-lg bg-[var(--app-blue)] text-white">Desbloquear Premium</button>
+            )}
           </div>
           <div className="space-y-3">
             {aiSuggestions.map(s => (

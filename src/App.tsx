@@ -6,6 +6,7 @@ import { LoadingSpinner } from './components/ui/skeleton-components';
 import { useNavigationGestures } from './components/hooks/useGestures';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from './components/ui/sheet';
 import { storage, KEYS } from './services/storage';
+import { api } from './services/api';
 
 // Lazy load components for better performance
 const SplashScreen = lazy(() => import('./components/SplashScreen'));
@@ -34,6 +35,7 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [tabHistory, setTabHistory] = useState<string[]>(['dashboard']);
+  const [isPremium, setIsPremium] = useState<boolean>(() => !!storage.get(KEYS.subscription));
 
   // Auto detect dark mode or use persisted theme
   useEffect(() => {
@@ -57,6 +59,20 @@ export default function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [isDarkMode]);
+
+  // Finalize OAuth if code present in URL hash
+  useEffect(() => {
+    const hash = window.location.hash || '';
+    const m = hash.match(/google_code=([^&]+)/);
+    if (m) {
+      const code = decodeURIComponent(m[1]);
+      api.googleOauthCallback({ code }).then(() => {
+        history.replaceState(null, '', window.location.pathname);
+      }).catch(() => {
+        history.replaceState(null, '', window.location.pathname);
+      });
+    }
+  }, []);
 
   // Check if user has completed onboarding
   useEffect(() => {

@@ -19,6 +19,8 @@ export const api = {
   // Auth
   register: (payload: { email: string; password: string; name?: string }) => http('/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
   login: (payload: { email: string; password: string }) => http('/auth/login', { method: 'POST', body: JSON.stringify(payload) }),
+  // Subscriptions (stubs)
+  createCheckout: (payload: { plan: 'monthly'|'annual'|'lifetime'|'trial' }) => Promise.resolve({ url: '#' }),
 
   // Tasks
   listTasks: () => http('/tasks'),

@@ -24,6 +24,7 @@ import { Switch } from './ui/switch';
 import PremiumModal from './PremiumModal';
 import { storage, KEYS } from '../services/storage';
 import { getLocale, setLocale } from '../i18n';
+import { api } from '../services/api';
 
 interface SettingsViewProps {
   onBack: () => void;
@@ -34,6 +35,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
   const [showPremium, setShowPremium] = useState(false);
   const [user, setUser] = useState(() => storage.get<any>(KEYS.user) || { id: 'guest', name: 'Convidado' });
   const [locale, setLoc] = useState(getLocale());
+  const [subscription, setSubscription] = useState<any>(() => storage.get(KEYS.subscription));
 
   const [notificationSettings, setNotificationSettings] = useState({
     pushEnabled: true,
@@ -269,6 +271,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
           <Button onClick={() => { setLocale('pt'); setLoc('pt'); }} variant={locale==='pt' ? undefined : 'outline'}>PT</Button>
           <Button onClick={() => { setLocale('en'); setLoc('en'); }} variant={locale==='en' ? undefined : 'outline'}>EN</Button>
         </div>
+      </Card>
+
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <h3 className="font-medium text-[var(--app-text)] mb-2">Assinatura</h3>
+        {subscription ? (
+          <div className="text-sm text-[var(--app-text-light)]">Plano ativo: {subscription.plan}</div>
+        ) : (
+          <div className="flex items-center space-x-2">
+            <Button onClick={() => setShowPremium(true)}>Ver planos</Button>
+            <Button variant="outline" onClick={() => { storage.set(KEYS.subscription, { plan: 'trial', startedAt: new Date().toISOString() }); setSubscription({ plan: 'trial' }); }}>Iniciar teste (7 dias)</Button>
+          </div>
+        )}
       </Card>
     </div>
   );
