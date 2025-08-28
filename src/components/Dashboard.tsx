@@ -546,10 +546,15 @@ const Dashboard: React.FC = () => {
           <button
             onClick={async () => {
               try {
-                const resp = await api.planWeek({});
-                showToast(`Plano semanal gerado: ${resp.message}`, 'success');
+                const insights = await api.weeklyInsights();
+                if (insights.insights && insights.insights.length > 0) {
+                  const topInsight = insights.insights[0];
+                  showToast(`${topInsight.title}: ${topInsight.text}`, 'info');
+                } else {
+                  showToast('Nenhum insight disponível ainda', 'info');
+                }
               } catch (e) {
-                showToast('Erro ao planejar semana', 'error');
+                showToast('Erro ao buscar insights', 'error');
               }
             }}
             className="flex items-center space-x-3 p-4 bg-[var(--app-blue)]15 rounded-xl hover:bg-[var(--app-blue)]20 transition-all group">

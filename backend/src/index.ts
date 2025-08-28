@@ -257,16 +257,68 @@ app.post('/integrations/google/import', async (req, res) => {
   res.json({ imported: 3, status: 'ok' });
 });
 
-// Orchestrator endpoints (stubs with simple heuristics)
+// Enhanced Orchestrator with better heuristics
 app.post('/orchestrator/schedule', async (req: any, res) => {
-  const { tasks = [], events = [], freeBlocks = [] } = req.body || {};
-  const allocations = tasks.map((t: any, idx: number) => {
-    const base = freeBlocks[idx % Math.max(1, freeBlocks.length)] || {};
-    const start = new Date(base.start || new Date());
-    const end = new Date(start.getTime() + ((t.durationMin || 30) * 60000));
-    return { taskId: t.id, start: start.toISOString(), end: end.toISOString(), reason: 'Primeiro slot disponível' };
+  const { tasks = [], events = [], freeBlocks = [], userPreferences = {} } = req.body || {};
+  
+  // Get recent check-ins for energy/mood patterns
+  const recentCheckins = await Checkin.find({ userId: req.userId })
+    .sort({ createdAt: -1 })
+    .limit(7);
+  
+  const avgEnergy = recentCheckins.length > 0 
+    ? recentCheckins.reduce((sum, c) => sum + (c.energy || 3), 0) / recentCheckins.length 
+    : 3;
+  
+  const avgMood = recentCheckins.length > 0
+    ? recentCheckins.reduce((sum, c) => sum + (c.mood || 3), 0) / recentCheckins.length
+    : 3;
+
+  // Score each task based on priority, energy requirements, and user patterns
+  const scoredTasks = tasks.map((task: any) => {
+    let score = 0;
+    
+    // Priority scoring
+    if (task.priority === 'high') score += 30;
+    else if (task.priority === 'medium') score += 20;
+    else score += 10;
+    
+    // Energy alignment (complex tasks when energy is high)
+    const taskComplexity = task.durationMin > 60 ? 'high' : task.durationMin > 30 ? 'medium' : 'low';
+    if (taskComplexity === 'high' && avgEnergy >= 4) score += 20;
+    else if (taskComplexity === 'medium' && avgEnergy >= 3) score += 15;
+    else if (taskComplexity === 'low') score += 10;
+    
+    // Time of day preferences (morning person vs night owl)
+    const hour = new Date().getHours();
+    const isMorningPerson = userPreferences.morningPerson || false;
+    if (isMorningPerson && hour < 12) score += 15;
+    else if (!isMorningPerson && hour >= 14) score += 15;
+    
+    return { ...task, score };
+  }).sort((a: any, b: any) => b.score - a.score);
+
+  // Allocate tasks to best available slots
+  const allocations = scoredTasks.map((task: any, idx: number) => {
+    const block = freeBlocks[idx % Math.max(1, freeBlocks.length)] || {};
+    const start = new Date(block.start || new Date());
+    const end = new Date(start.getTime() + ((task.durationMin || 30) * 60000));
+    
+    let reason = 'Alocação otimizada';
+    if (task.score >= 50) reason = 'Alta prioridade + energia ideal';
+    else if (task.score >= 35) reason = 'Prioridade média + bom momento';
+    else reason = 'Slot disponível';
+    
+    return { 
+      taskId: task.id, 
+      start: start.toISOString(), 
+      end: end.toISOString(), 
+      reason,
+      score: task.score
+    };
   });
-  res.json({ allocations });
+  
+  res.json({ allocations, insights: { avgEnergy, avgMood } });
 });
 
 app.post('/orchestrator/reschedule', async (req, res) => {
@@ -301,13 +353,106 @@ app.post('/rag/notes/summarize', async (req: any, res) => {
   res.json({ noteId, summary: 'Resumo indisponível (stub).' });
 });
 
-// Reports
+// Enhanced Reports with cross-metrics analysis
 app.get('/reports/weekly-insights', async (req: any, res) => {
+  const userId = String(req.userId);
+  
+  // Get last 7 days of data
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  
+  const checkins = await Checkin.find({ 
+    userId, 
+    createdAt: { $gte: weekAgo } 
+  }).sort({ createdAt: -1 });
+  
+  const tasks = await Task.find({ 
+    userId, 
+    createdAt: { $gte: weekAgo } 
+  }).sort({ createdAt: -1 });
+  
+  const insights = [];
+  
+  // Sleep analysis
+  const sleepData = checkins.filter(c => c.sleepHours && c.sleepHours > 0).map(c => c.sleepHours!);
+  if (sleepData.length > 0) {
+    const avgSleep = sleepData.reduce((sum: number, h: number) => sum + h, 0) / sleepData.length;
+    const lowSleepDays = sleepData.filter(h => h < 6).length;
+    const completedTasks = tasks.filter(t => t.completed).length;
+    const totalTasks = tasks.length;
+    
+    if (lowSleepDays > 0 && totalTasks > 0) {
+      const completionRate = (completedTasks / totalTasks) * 100;
+      insights.push({
+        id: 'sleep-productivity',
+        type: 'correlation',
+        title: 'Sono vs Produtividade',
+        text: `Nos ${lowSleepDays} dias com <6h de sono, você completou ${completionRate.toFixed(0)}% das tarefas.`,
+        recommendation: 'Priorize 7-8h de sono para melhor produtividade.',
+        impact: 'high'
+      });
+    }
+  }
+  
+  // Energy patterns
+  const energyData = checkins.filter(c => c.energy && c.energy > 0).map(c => c.energy!);
+  if (energyData.length > 0) {
+    const avgEnergy = energyData.reduce((sum: number, e: number) => sum + e, 0) / energyData.length;
+    const highEnergyDays = energyData.filter(e => e >= 4).length;
+    
+    insights.push({
+      id: 'energy-pattern',
+      type: 'pattern',
+      title: 'Padrão de Energia',
+      text: `Sua energia média foi ${avgEnergy.toFixed(1)}/5. ${highEnergyDays} dias com alta energia.`,
+      recommendation: highEnergyDays > 3 ? 'Agende tarefas complexas nos dias de alta energia.' : 'Considere melhorar hábitos de sono e exercício.',
+      impact: 'medium'
+    });
+  }
+  
+  // Mood trends
+  const moodData = checkins.filter(c => c.mood && c.mood > 0).map(c => c.mood!);
+  if (moodData.length > 0) {
+    const avgMood = moodData.reduce((sum: number, m: number) => sum + m, 0) / moodData.length;
+    const lowMoodDays = moodData.filter(m => m <= 2).length;
+    
+    if (lowMoodDays > 0) {
+      insights.push({
+        id: 'mood-insight',
+        type: 'trend',
+        title: 'Tendência de Humor',
+        text: `Humor médio: ${avgMood.toFixed(1)}/5. ${lowMoodDays} dias com humor baixo.`,
+        recommendation: 'Considere atividades de autocuidado e pausas mais frequentes.',
+        impact: 'medium'
+      });
+    }
+  }
+  
+  // Task completion patterns
+  if (tasks.length > 0) {
+    const completedTasks = tasks.filter(t => t.completed);
+    const completionRate = (completedTasks.length / tasks.length) * 100;
+    
+    insights.push({
+      id: 'task-completion',
+      type: 'performance',
+      title: 'Taxa de Conclusão',
+      text: `Você completou ${completionRate.toFixed(0)}% das ${tasks.length} tarefas da semana.`,
+      recommendation: completionRate < 70 ? 'Considere reduzir o número de tarefas ou melhorar o planejamento.' : 'Excelente! Mantenha o ritmo.',
+      impact: 'high'
+    });
+  }
+  
   res.json({
     period: 'last_7_days',
-    insights: [
-      { id: 'i1', text: 'Quando dorme <6h, conclui ~30% menos tarefas (estimativa).' }
-    ]
+    insights,
+    summary: {
+      totalCheckins: checkins.length,
+      totalTasks: tasks.length,
+      completedTasks: tasks.filter(t => t.completed).length,
+      avgEnergy: energyData.length > 0 ? (energyData.reduce((sum: number, e: number) => sum + e, 0) / energyData.length).toFixed(1) : 'N/A',
+      avgMood: moodData.length > 0 ? (moodData.reduce((sum: number, m: number) => sum + m, 0) / moodData.length).toFixed(1) : 'N/A'
+    }
   });
 });
 
