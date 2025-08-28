@@ -442,9 +442,46 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
               </div>
               <div>
                 <div className="text-sm text-[var(--app-text-light)] mb-2">Personalização Avançada</div>
-                <div className="p-3 rounded-lg bg-[var(--app-yellow)]10 flex items-center justify-between">
-                  <span className="text-sm text-[var(--app-text)]">Temas extras, layouts e packs de ícones</span>
-                  <Button size="sm" onClick={() => setShowPremium(true)}>Premium</Button>
+                <div className="p-3 rounded-lg bg-[var(--app-yellow)]10 flex flex-col space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[var(--app-text)]">Temas extras (Sunset, Forest, Neon)</span>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-5 h-5 rounded-full bg-gradient-to-r from-pink-500 to-orange-500 opacity-50" />
+                      <div className="w-5 h-5 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 opacity-50" />
+                      <div className="w-5 h-5 rounded-full bg-gradient-to-r from-cyan-400 to-fuchsia-600 opacity-50" />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[var(--app-text)]">Avatares exclusivos</span>
+                    <div className="flex -space-x-2">
+                      <div className="w-7 h-7 rounded-full bg-[var(--app-blue)] opacity-50 border-2 border-white" />
+                      <div className="w-7 h-7 rounded-full bg-[var(--app-purple)] opacity-50 border-2 border-white" />
+                      <div className="w-7 h-7 rounded-full bg-[var(--app-green)] opacity-50 border-2 border-white" />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[var(--app-text)]">Packs de ícones</span>
+                    <div className="text-xs text-[var(--app-text-light)]">Minimal • Rounded • Outline</div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[var(--app-text)]">Densidade de layout</span>
+                    <div className="flex items-center space-x-1">
+                      <Button size="sm" variant="outline" disabled>Compacto</Button>
+                      <Button size="sm" variant="outline" disabled>Padrão</Button>
+                      <Button size="sm" variant="outline" disabled>Conforto</Button>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[var(--app-text)]">Fontes</span>
+                    <div className="flex items-center space-x-1">
+                      <Button size="sm" variant="outline" disabled>Sans</Button>
+                      <Button size="sm" variant="outline" disabled>Serif</Button>
+                      <Button size="sm" variant="outline" disabled>Mono</Button>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end">
+                    <Button size="sm" onClick={() => setShowPremium(true)}>Fazer upgrade</Button>
+                  </div>
                 </div>
               </div>
             </div>
