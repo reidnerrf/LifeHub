@@ -3,6 +3,7 @@ import { Search, Plus, FileText, Mic, Camera, Tag, Star, Archive, MoreVertical }
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
+import { EmptyState } from './ui/empty-state';
 
 const NotesView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -185,7 +186,9 @@ const NotesView: React.FC = () => {
 
       {/* Notes Grid */}
       <div className="grid grid-cols-1 gap-4">
-        {getFilteredNotes().map((note) => (
+        {getFilteredNotes().length === 0 ? (
+          <EmptyState title="Sem notas" description="Crie uma nota para começar" />
+        ) : getFilteredNotes().map((note) => (
           <Card 
             key={note.id} 
             className="p-4 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer"

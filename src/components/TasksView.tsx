@@ -5,6 +5,7 @@ import { Badge } from './ui/badge';
 import { storage } from '../services/storage';
 import { SegmentedControl } from './ui/segmented-control';
 import { Tag } from './ui/tag';
+import { EmptyState } from './ui/empty-state';
 
 const TasksView: React.FC = () => {
   const [selectedBoard, setSelectedBoard] = useState('kanban');
@@ -165,11 +166,15 @@ const TasksView: React.FC = () => {
                   </button>
                 </div>
                 
-                <div className="space-y-3">
-                  {column.tasks.map((task) => (
-                    <TaskCard key={task.id} task={task} />
-                  ))}
-                </div>
+                {column.tasks.length === 0 ? (
+                  <EmptyState title="Sem itens" description="Adicione uma tarefa para começar" />
+                ) : (
+                  <div className="space-y-3">
+                    {column.tasks.map((task) => (
+                      <TaskCard key={task.id} task={task} />
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -179,9 +184,13 @@ const TasksView: React.FC = () => {
       {/* List View */}
       {selectedBoard === 'list' && (
         <div className="flex-1 space-y-3">
-          {[...tasks.todo, ...tasks.inProgress, ...tasks.done].map((task) => (
-            <TaskCard key={task.id} task={task} />
-          ))}
+          {[...tasks.todo, ...tasks.inProgress, ...tasks.done].length === 0 ? (
+            <EmptyState title="Nenhuma tarefa" description="Crie sua primeira tarefa" />
+          ) : (
+            [...tasks.todo, ...tasks.inProgress, ...tasks.done].map((task) => (
+              <TaskCard key={task.id} task={task} />
+            ))
+          )}
         </div>
       )}
     </div>

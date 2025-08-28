@@ -4,6 +4,7 @@ import PWAManager from './components/PWAManager';
 import GlobalSearch from './components/GlobalSearch';
 import { LoadingSpinner } from './components/ui/skeleton-components';
 import { useNavigationGestures } from './components/hooks/useGestures';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from './components/ui/sheet';
 
 // Lazy load components for better performance
 const SplashScreen = lazy(() => import('./components/SplashScreen'));
@@ -27,6 +28,7 @@ export default function App() {
   const [appState, setAppState] = useState<AppState>('splash');
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -351,7 +353,7 @@ export default function App() {
   };
 
   const handleAddAction = () => {
-    setShowAddModal(true);
+    setShowQuickAdd(true);
     
     // Analytics tracking
     console.log('User interaction:', {
@@ -538,6 +540,23 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* BottomSheet Quick Add */}
+        <Sheet open={showQuickAdd} onOpenChange={setShowQuickAdd}>
+          <SheetContent side="bottom" className="rounded-t-3xl p-6">
+            <SheetHeader>
+              <SheetTitle>Adicionar rápido</SheetTitle>
+            </SheetHeader>
+            <div className="grid grid-cols-3 gap-3">
+              <button onClick={() => { setShowQuickAdd(false); setShowAddModal(true); setActiveTab('tasks'); }} className="p-4 rounded-2xl bg-[var(--app-light-gray)]">Tarefa</button>
+              <button onClick={() => { setShowQuickAdd(false); setShowAddModal(true); setActiveTab('calendar'); }} className="p-4 rounded-2xl bg-[var(--app-light-gray)]">Evento</button>
+              <button onClick={() => { setShowQuickAdd(false); setShowAddModal(true); setActiveTab('notes'); }} className="p-4 rounded-2xl bg-[var(--app-light-gray)]">Nota</button>
+              <button onClick={() => { setShowQuickAdd(false); setShowAddModal(true); setActiveTab('habits'); }} className="p-4 rounded-2xl bg-[var(--app-light-gray)]">Hábito</button>
+              <button onClick={() => { setShowQuickAdd(false); setShowAddModal(true); setActiveTab('finances'); }} className="p-4 rounded-2xl bg-[var(--app-light-gray)]">Conta</button>
+              <button onClick={() => { setShowQuickAdd(false); setActiveTab('focus'); }} className="p-4 rounded-2xl bg-[var(--app-light-gray)]">Foco</button>
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     </PWAManager>
   );
