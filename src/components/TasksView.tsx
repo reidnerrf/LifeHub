@@ -3,6 +3,8 @@ import { Plus, MoreVertical, Clock, Flag } from 'lucide-react';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { storage } from '../services/storage';
+import { SegmentedControl } from './ui/segmented-control';
+import { Tag } from './ui/tag';
 
 const TasksView: React.FC = () => {
   const [selectedBoard, setSelectedBoard] = useState('kanban');
@@ -102,9 +104,7 @@ const TasksView: React.FC = () => {
       
       <div className="flex flex-wrap gap-1">
         {task.tags.map((tag: string, index: number) => (
-          <Badge key={index} variant="secondary" className="text-xs px-2 py-1 rounded-full">
-            {tag}
-          </Badge>
+          <Tag key={index}>{tag}</Tag>
         ))}
       </div>
     </Card>
@@ -115,28 +115,14 @@ const TasksView: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold text-gray-900">Tarefas</h1>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => setSelectedBoard('list')}
-            className={`px-3 py-1 rounded-lg text-sm ${
-              selectedBoard === 'list' 
-                ? 'bg-[var(--app-blue)] text-white' 
-                : 'bg-gray-100 text-[var(--app-gray)]'
-            }`}
-          >
-            Lista
-          </button>
-          <button
-            onClick={() => setSelectedBoard('kanban')}
-            className={`px-3 py-1 rounded-lg text-sm ${
-              selectedBoard === 'kanban' 
-                ? 'bg-[var(--app-blue)] text-white' 
-                : 'bg-gray-100 text-[var(--app-gray)]'
-            }`}
-          >
-            Kanban
-          </button>
-        </div>
+        <SegmentedControl
+          options={[
+            { label: 'Lista', value: 'list' },
+            { label: 'Kanban', value: 'kanban' }
+          ]}
+          value={selectedBoard}
+          onChange={setSelectedBoard}
+        />
       </div>
 
       {/* Stats */}

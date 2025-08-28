@@ -3,6 +3,7 @@ import { Play, Pause, Square, Coffee, Brain, RotateCcw, Volume2, VolumeX } from 
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
+import { Timer } from './ui/timer';
 
 const FocusView: React.FC = () => {
   const [timeLeft, setTimeLeft] = useState(25 * 60); // 25 minutos em segundos
@@ -158,6 +159,9 @@ const FocusView: React.FC = () => {
 
       {/* Timer Card */}
       <Card className="p-8 bg-[var(--app-card)] rounded-3xl border-0 shadow-lg text-center">
+        <div className="mb-4 flex justify-center">
+          <Timer initialSeconds={timeLeft} running={isActive} />
+        </div>
         <div className="mb-6">
           <h3 className="text-lg font-medium text-[var(--app-text)] mb-2">{getSessionLabel()}</h3>
           <p className="text-sm text-[var(--app-text-light)]">
