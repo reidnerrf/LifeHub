@@ -39,6 +39,9 @@ export const api = {
 
   // Integrations
   importGoogle: () => http('/integrations/google/import', { method: 'POST' }),
+  googleAuthUrl: () => http('/integrations/google/auth-url'),
+  googleOauthCallback: (payload: { code: string; redirectUri?: string }) => http('/integrations/google/oauth/callback', { method: 'POST', body: JSON.stringify(payload) }),
+  googleEvents: () => http('/integrations/google/events'),
 
   // Orchestrator
   orchestrateSchedule: (payload: any) => http('/orchestrator/schedule', { method: 'POST', body: JSON.stringify(payload) }),

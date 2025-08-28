@@ -109,6 +109,16 @@ const Transaction = model('Transaction', TransactionSchema);
 const UserStats = model('UserStats', UserStatsSchema);
 const Achievement = model('Achievement', AchievementSchema);
 
+// Google OAuth token storage
+const GoogleAuthSchema = new Schema({
+  userId: { type: String, index: true, unique: true },
+  accessToken: { type: String },
+  refreshToken: { type: String },
+  expiryDate: { type: Date },
+  scope: { type: String }
+}, { timestamps: true });
+const GoogleAuth = model('GoogleAuth', GoogleAuthSchema);
+
 // Auth
 const authMiddleware = (req: any, res: any, next: any) => {
   const authHeader = req.headers.authorization as string | undefined;
@@ -344,10 +354,127 @@ app.post('/ai/reschedule', (req, res) => {
   res.json({ suggestions });
 });
 
-// Google Calendar import stub
-app.post('/integrations/google/import', async (req, res) => {
-  // Stub: pretend we imported 3 events
-  res.json({ imported: 3, status: 'ok' });
+// Google OAuth endpoints
+app.get('/integrations/google/auth-url', async (req: any, res) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI;
+  if (!clientId || !redirectUri) return res.status(500).json({ error: 'google oauth not configured' });
+  const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar.readonly');
+  const state = Math.random().toString(36).slice(2);
+  const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&access_type=offline&include_granted_scopes=true&prompt=consent&state=${state}`;
+  res.json({ url, state });
+});
+
+app.post('/integrations/google/oauth/callback', async (req: any, res) => {
+  const { code, redirectUri } = req.body || {};
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const finalRedirect = redirectUri || process.env.GOOGLE_REDIRECT_URI;
+  if (!code || !clientId || !clientSecret || !finalRedirect) return res.status(400).json({ error: 'missing oauth config or code' });
+  try {
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: finalRedirect,
+        grant_type: 'authorization_code'
+      }) as any
+    } as any);
+    if (!tokenRes.ok) {
+      const t = await tokenRes.text();
+      return res.status(400).json({ error: 'token_exchange_failed', details: t });
+    }
+    const json = await tokenRes.json() as any;
+    const expiresIn = json.expires_in ? Number(json.expires_in) : 3600;
+    const expiryDate = new Date(Date.now() + expiresIn * 1000);
+    await GoogleAuth.findOneAndUpdate(
+      { userId: String(req.userId) },
+      { accessToken: json.access_token, refreshToken: json.refresh_token, expiryDate, scope: json.scope },
+      { upsert: true, new: true }
+    );
+    res.json({ ok: true });
+  } catch (e: any) {
+    res.status(500).json({ error: 'oauth_callback_error', details: String(e?.message || e) });
+  }
+});
+
+async function getValidAccessToken(userId: string) {
+  const doc = await GoogleAuth.findOne({ userId });
+  if (!doc) return null;
+  const clientId = process.env.GOOGLE_CLIENT_ID as string;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET as string;
+  if (!doc.expiryDate || doc.expiryDate.getTime() - Date.now() > 60 * 1000) {
+    return doc.accessToken;
+  }
+  if (!doc.refreshToken) return doc.accessToken;
+  const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: doc.refreshToken,
+      grant_type: 'refresh_token'
+    }) as any
+  } as any);
+  if (!refreshRes.ok) return doc.accessToken;
+  const json = await refreshRes.json() as any;
+  const expiresIn = json.expires_in ? Number(json.expires_in) : 3600;
+  doc.accessToken = json.access_token || doc.accessToken;
+  doc.expiryDate = new Date(Date.now() + expiresIn * 1000);
+  await doc.save();
+  return doc.accessToken;
+}
+
+app.get('/integrations/google/events', async (req: any, res) => {
+  try {
+    const token = await getValidAccessToken(String(req.userId));
+    if (!token) return res.status(400).json({ error: 'not_connected' });
+    const timeMin = new Date().toISOString();
+    const timeMax = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime`;
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } } as any);
+    if (!resp.ok) {
+      const txt = await resp.text();
+      return res.status(400).json({ error: 'google_api_error', details: txt });
+    }
+    const json = await resp.json() as any;
+    const events = (json.items || []).map((it: any) => ({ id: it.id, title: it.summary, start: it.start?.dateTime || it.start?.date, end: it.end?.dateTime || it.end?.date, location: it.location }));
+    res.json({ events });
+  } catch (e: any) {
+    res.status(500).json({ error: 'list_events_error', details: String(e?.message || e) });
+  }
+});
+
+app.post('/integrations/google/import', async (req: any, res) => {
+  try {
+    const token = await getValidAccessToken(String(req.userId));
+    if (!token) return res.status(400).json({ error: 'not_connected' });
+    const timeMin = new Date().toISOString();
+    const timeMax = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime`;
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } } as any);
+    if (!resp.ok) {
+      const txt = await resp.text();
+      return res.status(400).json({ error: 'google_api_error', details: txt });
+    }
+    const json = await resp.json() as any;
+    const items = (json.items || []).map((it: any) => ({
+      userId: String(req.userId),
+      title: it.summary || 'Evento',
+      start: new Date(it.start?.dateTime || it.start?.date || Date.now()),
+      end: new Date(it.end?.dateTime || it.end?.date || Date.now()),
+      location: it.location,
+      source: 'google'
+    }));
+    await Event.insertMany(items, { ordered: false }).catch(() => {});
+    res.json({ imported: items.length, status: 'ok' });
+  } catch (e: any) {
+    res.status(500).json({ error: 'import_error', details: String(e?.message || e) });
+  }
 });
 
 // Enhanced Orchestrator with better heuristics

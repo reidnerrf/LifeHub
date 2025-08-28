@@ -46,13 +46,17 @@ const CalendarView: React.FC = () => {
 
   const connectGoogle = async () => {
     try {
-      alert('Abrindo OAuth Google (simulado). Após conectar, faremos leitura.');
-      storage.set(KEYS.googleConnected, true);
-      setGoogleConnected(true);
+      const { url } = await api.googleAuthUrl();
+      const w = window.open(url, '_blank', 'width=500,height=700');
+      alert('Conclua o OAuth na janela aberta e clique OK para continuar.');
+      // Backend expects callback POST; aqui assumimos que o user colou code no redirect do backend.
+      // Como fallback, tentamos listar eventos; se sucesso, marcamos conectado.
       try {
-        const imported = await api.importGoogle();
-        if (imported?.events) {
-          setEvents((prev) => [...prev, ...imported.events.map((e: any) => ({ id: e.id || Math.random(), title: e.summary || 'Evento', start: e.start, end: e.end, location: e.location }))]);
+        const ev = await api.googleEvents();
+        if (ev?.events) {
+          setEvents((prev) => [...prev, ...ev.events]);
+          storage.set(KEYS.googleConnected, true);
+          setGoogleConnected(true);
         }
       } catch {}
     } catch {}
