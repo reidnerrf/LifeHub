@@ -78,5 +78,45 @@ app.get('/ai/suggestions', (_req, res) => {
   ]);
 });
 
+// AI planning score
+app.post('/ai/score-planning', (req, res) => {
+  const { totalTasks = 0, conflictingEvents = 0, overbookedMinutes = 0, freeBlocks = [] } = req.body || {};
+  const insights: string[] = [];
+  let score = 100;
+  if (conflictingEvents > 0) {
+    score -= Math.min(30, conflictingEvents * 10);
+    insights.push('Há conflitos na agenda. Considere mover eventos.');
+  }
+  if (overbookedMinutes > 30) {
+    score -= Math.min(40, Math.floor(overbookedMinutes / 15) * 5);
+    insights.push('Dia superlotado. Adicione folgas.');
+  }
+  if (!freeBlocks || freeBlocks.length === 0) {
+    score -= 20;
+    insights.push('Sem blocos livres planejados.');
+  }
+  if (totalTasks > 12) {
+    score -= 10;
+    insights.push('Muitas tarefas no dia. Priorize as críticas.');
+  }
+  score = Math.max(0, Math.min(100, score));
+  res.json({ score, insights });
+});
+
+// AI reschedule (very simple heuristic)
+app.post('/ai/reschedule', (req, res) => {
+  const { tasks = [], freeBlocks = [] } = req.body || {};
+  const suggestions = [] as Array<{ taskId: string; suggestedStart: string; suggestedEnd: string; reason: string }>;
+  for (const task of tasks) {
+    const block = freeBlocks[0];
+    if (!block) break;
+    const start = new Date(block.start || new Date());
+    const dur = (task.durationMin || 30) * 60000;
+    const end = new Date(start.getTime() + dur);
+    suggestions.push({ taskId: String(task.id), suggestedStart: start.toISOString(), suggestedEnd: end.toISOString(), reason: 'Primeiro bloco livre disponível' });
+  }
+  res.json({ suggestions });
+});
+
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 4000;
 app.listen(port, () => logger.info(`api on ${port}`));
