@@ -130,6 +130,33 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
       status: 'active',
       lastSync: '2025-08-26T11:00:00Z',
       features: ['Playlists de foco', 'Controle de reprodução', 'Estatísticas']
+    },
+    {
+      id: 'notion',
+      name: 'Notion',
+      description: 'Sync unidirecional de páginas para o LifeHub',
+      icon: <ExternalLink size={20} />,
+      connected: false,
+      status: 'available',
+      features: ['Importar páginas', 'Sincronização manual']
+    },
+    {
+      id: 'slack',
+      name: 'Slack/Teams',
+      description: 'Atualiza seu status para Foco automaticamente',
+      icon: <ExternalLink size={20} />,
+      connected: false,
+      status: 'available',
+      features: ['Status Foco', 'Silenciar notificações']
+    },
+    {
+      id: 'wearables',
+      name: 'Wearables',
+      description: 'Apple Watch/WearOS para hábitos e foco',
+      icon: <Smartphone size={20} />,
+      connected: false,
+      status: 'available',
+      features: ['Passos', 'Foco', 'Batimentos']
     }
   ]);
 
@@ -448,6 +475,15 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
                     <Button size="sm" className="text-xs h-7 px-3 bg-[var(--app-blue)]" onClick={async () => {
                       try { const res = await api.trelloImport({ csvUrl: 'https://example.com/board.csv' }); alert(`Importados: ${res.imported}`); } catch { alert('Falha import Trello'); }
                     }}>Importar Trello CSV</Button>
+                  )}
+                  {integration.id === 'notion' && (
+                    <Button size="sm" className="text-xs h-7 px-3 bg-[var(--app-blue)]" onClick={async () => { try { const r = await api.notionSync({}); alert(`Páginas importadas: ${r.synced}`); } catch { alert('Falha Notion'); } }}>Sync Notion</Button>
+                  )}
+                  {integration.id === 'slack' && (
+                    <Button size="sm" className="text-xs h-7 px-3 bg-[var(--app-blue)]" onClick={async () => { try { const r = await api.slackStatus({ status: 'focusing' }); alert('Status foco atualizado'); } catch { alert('Falha Slack'); } }}>Status Foco</Button>
+                  )}
+                  {integration.id === 'wearables' && (
+                    <Button size="sm" className="text-xs h-7 px-3 bg-[var(--app-blue)]" onClick={async () => { try { const r = await api.wearablesSummary(); alert(`Passos: ${r.steps}, Foco: ${r.focusMinutes}min`); } catch { alert('Falha Wearables'); } }}>Resumo</Button>
                   )}
                   {integration.connected ? (
                     <>
