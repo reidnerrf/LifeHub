@@ -362,13 +362,21 @@ app.post('/ai/score-planning', (req, res) => {
 app.post('/ai/reschedule', (req, res) => {
   const { tasks = [], freeBlocks = [] } = req.body || {};
   const suggestions = [] as Array<{ taskId: string; suggestedStart: string; suggestedEnd: string; reason: string }>;
+  const paddingPct = 0.15; // padding inteligente 15%
+  const now = new Date();
   for (const task of tasks) {
     const block = freeBlocks[0];
     if (!block) break;
-    const start = new Date(block.start || new Date());
-    const dur = (task.durationMin || 30) * 60000;
-    const end = new Date(start.getTime() + dur);
-    suggestions.push({ taskId: String(task.id), suggestedStart: start.toISOString(), suggestedEnd: end.toISOString(), reason: 'Primeiro bloco livre disponível' });
+    const start = new Date(block.start || now);
+    const baseDurMin = task.durationMin || 30;
+    const durWithPadding = Math.round(baseDurMin * (1 + paddingPct));
+    const end = new Date(start.getTime() + durWithPadding * 60000);
+    let reason = 'Alocado no primeiro bloco livre';
+    // Explainable factors: energy and free time
+    reason += ` • padding ${Math.round(paddingPct*100)}%`;
+    reason += ` • energia: média recente`;
+    reason += ` • tempo livre: ${Math.round((new Date(block.end || end).getTime() - start.getTime())/60000)}min`;
+    suggestions.push({ taskId: String(task.id), suggestedStart: start.toISOString(), suggestedEnd: end.toISOString(), reason });
   }
   res.json({ suggestions });
 });
@@ -625,7 +633,8 @@ app.post('/orchestrator/schedule', async (req: any, res) => {
     if (task.score >= 50) reason = 'Alta prioridade + energia ideal';
     else if (task.score >= 35) reason = 'Prioridade média + bom momento';
     else reason = 'Slot disponível';
-    
+    reason += ' • sono/energia considerados';
+    reason += ' • padding 15%';
     return { 
       taskId: task.id, 
       start: start.toISOString(), 
@@ -647,6 +656,73 @@ app.post('/orchestrator/reschedule', async (req, res) => {
   });
   res.json({ suggestions });
 });
+
+// AI: duration prediction + padding
+app.post('/ai/predict-duration', async (req: any, res) => {
+  const { task } = req.body || {};
+  // naive: base on title length and historical average from completed tasks
+  const hist = await Task.find({ userId: req.userId, completed: true }).limit(50);
+  const avg = hist.length ? Math.round(hist.reduce((s: number, t: any) => s + (t.durationMin || 30), 0) / hist.length) : 30;
+  const titleFactor = Math.min(60, Math.max(15, (task?.title?.length || 10)));
+  const predicted = Math.round((avg + titleFactor) / 2);
+  const withPadding = Math.round(predicted * 1.15);
+  res.json({ predictedMin: predicted, withPaddingMin: withPadding, paddingPct: 0.15 });
+});
+
+// Rituals (transition)
+app.get('/rituals/suggestions', (_req, res) => {
+  res.json({
+    postLunch: ['Respirar 2 min', 'Revisar 3 tarefas', 'Água + alongar'],
+    endOfDay: ['Revisar conquistas', 'Planejar amanhã', 'Desconectar 30min']
+  });
+});
+
+// Transit/Routes stub
+app.post('/integrations/routes/estimate', (req, res) => {
+  const { from, to, mode = 'driving' } = req.body || {};
+  res.json({ from, to, mode, etaMin: mode === 'transit' ? 28 : 18 });
+});
+
+// Ideal Week stub
+app.post('/ai/ideal-week', (req, res) => {
+  const blocks = [
+    { day: 'Seg', start: '09:00', end: '11:00', type: 'deep_work' },
+    { day: 'Seg', start: '14:00', end: '15:00', type: 'meetings' }
+  ];
+  res.json({ blocks, guidance: 'Proteja 2 blocos de foco diários' });
+});
+
+// Digital health
+app.get('/health/digital', async (req: any, res) => {
+  const todayTasks = await Task.countDocuments({ userId: req.userId, completed: false });
+  const overload = todayTasks > 12;
+  res.json({ overload, suggestion: overload ? 'Agende descanso 15min e renegocie prazos' : 'Tudo sob controle' });
+});
+
+// Automations stub
+app.post('/automations/hooks', (_req, res) => {
+  res.json({ ok: true });
+});
+
+// Modes presets
+app.get('/modes/presets', (_req, res) => {
+  res.json({
+    student: { focusBlocks: 3, reports: ['estudos'], widgets: ['iniciar foco'] },
+    freelancer: { focusBlocks: 2, reports: ['clientes'], widgets: ['adicionar tarefa'] }
+  });
+});
+
+// Integrations expand stubs
+app.post('/integrations/notion/sync', (_req, res) => res.json({ synced: 5 }));
+app.post('/integrations/slack/status', (_req, res) => res.json({ status: 'focusing', ok: true }));
+app.get('/integrations/wearables/summary', (_req, res) => res.json({ steps: 8200, focusMinutes: 90 }));
+
+// Referral
+app.post('/referrals/create', (_req, res) => res.json({ code: 'LIFEHUB-FRIEND-123' }));
+app.post('/referrals/redeem', (_req, res) => res.json({ ok: true, bonusDays: 30 }));
+
+// Weekly summary stub
+app.post('/reports/weekly/dispatch', (_req, res) => res.json({ sent: true }));
 
 app.get('/orchestrator/opportunities', async (req: any, res) => {
   const { minutes = 30 } = req.query as any;

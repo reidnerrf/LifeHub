@@ -138,6 +138,17 @@ const CalendarView: React.FC = () => {
           >
             {googleConnected ? 'Google conectado' : 'Conectar Google'}
           </button>
+          <button
+            onClick={async () => {
+              try {
+                const res = await api.estimateRoute({ from: 'Casa', to: 'Próximo evento', mode: 'transit' });
+                alert(`Rota: ${res.mode}, ETA ${res.etaMin}min`);
+              } catch {}
+            }}
+            className={`px-3 py-1 rounded-lg text-sm bg-gray-100 text-[var(--app-gray)]`}
+          >
+            Rotas
+          </button>
         </div>
       </div>
 

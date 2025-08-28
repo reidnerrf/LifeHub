@@ -279,7 +279,7 @@ const Dashboard: React.FC = () => {
               try {
                 const payload = { tasks: [{ id: 't1', durationMin: 30 }], freeBlocks: [{ start: new Date().toISOString(), end: new Date(Date.now()+60*60*1000).toISOString() }] };
                 const res = await api.reschedule(payload);
-                alert(`Sugestões: ${res.suggestions.map(s => `${s.taskId} -> ${new Date(s.suggestedStart).toLocaleTimeString('pt-BR')}`).join(', ')}`);
+                alert(`Sugestões: ${res.suggestions.map((s: any) => `${s.taskId} ${new Date(s.suggestedStart).toLocaleTimeString('pt-BR')} (${s.reason})`).join('\n')}`);
               } catch (e) {
                 alert('Não foi possível gerar sugestões agora.');
               }
