@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   Calendar, 
   CheckSquare, 
@@ -27,9 +27,12 @@ import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import PremiumModal from './PremiumModal';
+import { aiOrchestrator } from '../services/aiOrchestrator';
 
 const Dashboard: React.FC = () => {
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
+  const [showPremium, setShowPremium] = useState(false);
 
   // Sample data for charts
   const productivityData = [
@@ -137,6 +140,8 @@ const Dashboard: React.FC = () => {
 
   const visibleNotifications = smartNotifications.filter(n => !dismissedNotifications.includes(n.id));
 
+  const aiSuggestions = useMemo(() => aiOrchestrator.getDailySuggestions(new Date()), []);
+
   return (
     <div className="flex flex-col space-y-6 pb-6">
       {/* Header with Motivational Message */}
@@ -215,6 +220,29 @@ const Dashboard: React.FC = () => {
             );
           })}
         </div>
+      )}
+
+      {/* AI Suggestions */}
+      {aiSuggestions.length > 0 && (
+        <Card className="p-5 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-2">
+              <Sparkles size={18} className="text-[var(--app-blue)]" />
+              <h3 className="font-medium text-[var(--app-text)]">Sugestões da IA</h3>
+            </div>
+            <button onClick={() => setShowPremium(true)} className="text-xs px-3 py-1 rounded-lg bg-[var(--app-blue)] text-white">Desbloquear Premium</button>
+          </div>
+          <div className="space-y-3">
+            {aiSuggestions.map(s => (
+              <div key={s.id} className="p-3 rounded-xl bg-[var(--app-light-gray)]">
+                <div className="text-sm font-medium text-[var(--app-text)]">{s.title}</div>
+                {s.description && (
+                  <div className="text-xs text-[var(--app-text-light)] mt-1">{s.description}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
       )}
 
       {/* Stats Cards */}
@@ -444,6 +472,7 @@ const Dashboard: React.FC = () => {
           </button>
         </div>
       </Card>
+      <PremiumModal open={showPremium} onClose={() => setShowPremium(false)} />
     </div>
   );
 };

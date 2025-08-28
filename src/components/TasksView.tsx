@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Plus, MoreVertical, Clock, Flag } from 'lucide-react';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
+import { storage } from '../services/storage';
 
 const TasksView: React.FC = () => {
   const [selectedBoard, setSelectedBoard] = useState('kanban');
 
-  const tasks = {
+  const [tasks, setTasks] = useState({
     todo: [
       {
         id: 1,
@@ -45,7 +46,16 @@ const TasksView: React.FC = () => {
         tags: ['email'],
       },
     ],
-  };
+  });
+
+  useEffect(() => {
+    const saved = storage.get<typeof tasks>('tasks');
+    if (saved) setTasks(saved);
+  }, []);
+
+  useEffect(() => {
+    storage.set('tasks', tasks);
+  }, [tasks]);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {

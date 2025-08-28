@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Search, Plus, FileText, Mic, Camera, Tag, Star, Archive, MoreVertical } from 'lucide-react';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
@@ -7,8 +7,7 @@ import { Input } from './ui/input';
 const NotesView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
-
-  const notes = [
+  const [notes, setNotes] = useState([
     {
       id: 1,
       title: 'Ideias para o Projeto',
@@ -70,7 +69,20 @@ const NotesView: React.FC = () => {
       date: '2025-08-22',
       color: 'var(--app-blue)',
     },
-  ];
+  ]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('notes');
+      if (saved) setNotes(JSON.parse(saved));
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('notes', JSON.stringify(notes));
+    } catch {}
+  }, [notes]);
 
   const filters = [
     { id: 'all', label: 'Todas', count: notes.length },
