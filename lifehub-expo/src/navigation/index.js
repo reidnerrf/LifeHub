@@ -11,6 +11,7 @@ import Notes from '../screens/Notes';
 import Finances from '../screens/Finances';
 import Habits from '../screens/Habits';
 import Assistant from '../screens/Assistant';
+import Gamification from '../screens/Gamification';
 
 const Tab = createBottomTabNavigator();
 
@@ -38,6 +39,8 @@ export default function RootNavigator() {
                      iconName = focused ? 'checkmark-circle' : 'checkmark-circle-outline';
                    } else if (route.name === 'Assistant') {
                      iconName = focused ? 'sparkles' : 'sparkles-outline';
+                   } else if (route.name === 'Gamification') {
+                     iconName = focused ? 'trophy' : 'trophy-outline';
                    }
 
                    return <Ionicons name={iconName} size={size} color={color} />;
@@ -55,6 +58,7 @@ export default function RootNavigator() {
                <Tab.Screen name="Finances" component={Finances} />
                <Tab.Screen name="Habits" component={Habits} />
                <Tab.Screen name="Assistant" component={Assistant} />
+               <Tab.Screen name="Gamification" component={Gamification} />
              </Tab.Navigator>
     </NavigationContainer>
   );
