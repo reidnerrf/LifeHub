@@ -36,6 +36,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [tabHistory, setTabHistory] = useState<string[]>(['dashboard']);
   const [isPremium, setIsPremium] = useState<boolean>(() => !!storage.get(KEYS.subscription));
+  const [fontScale, setFontScale] = useState<number>(() => storage.get<number>(KEYS.accessibilityFontScale) || 1);
 
   // Auto detect dark mode or use persisted theme
   useEffect(() => {
@@ -59,6 +60,13 @@ export default function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [isDarkMode]);
+
+  // Apply font scale and high contrast
+  useEffect(() => {
+    document.documentElement.style.setProperty('--lh-font-scale', String(fontScale));
+    const highContrast = storage.get<boolean>(KEYS.accessibilityHighContrast);
+    if (highContrast) document.documentElement.classList.add('hc'); else document.documentElement.classList.remove('hc');
+  }, [fontScale]);
 
   // Finalize OAuth if code present in URL hash
   useEffect(() => {

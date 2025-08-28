@@ -42,6 +42,11 @@ export const KEYS = {
   appearanceAvatar: 'appearance.avatar',
   appearanceIconPack: 'appearance.iconPack',
   appearanceDensity: 'appearance.density',
-  appearanceFont: 'appearance.font'
+  appearanceFont: 'appearance.font',
+  accessibilityHighContrast: 'accessibility.highContrast',
+  accessibilityFontScale: 'accessibility.fontScale',
+  privacyLocalAI: 'privacy.localAI',
+  privacyDataShare: 'privacy.dataShare',
+  mode: 'mode'
 } as const;
 

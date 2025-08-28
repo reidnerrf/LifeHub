@@ -100,12 +100,17 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) => {
       setCurrentStep(prev => prev + 1);
     } else {
       // Persist minimal onboarding preferences
-      storage.set(KEYS.onboarding, {
+      const prefs = {
         goals: selectedGoals,
         preferredViews,
         enableSmartSuggestions: enableSmart,
         theme
-      });
+      };
+      storage.set(KEYS.onboarding, prefs);
+      // Personalize app defaults
+      if (prefs.theme !== 'system') storage.set(KEYS.theme, prefs.theme);
+      if (prefs.goals.includes('Foco')) storage.set(KEYS.mode, 'focus');
+      if (prefs.goals.includes('Bem-estar')) storage.set(KEYS.accessibilityFontScale, 1.1);
       if (theme !== 'system') storage.set(KEYS.theme, theme);
       onComplete();
     }
