@@ -31,6 +31,7 @@ import PremiumModal from './PremiumModal';
 import { aiOrchestrator } from '../services/aiOrchestrator';
 import { api } from '../services/api';
 import { storage, KEYS } from '../services/storage';
+import { isPremiumActive } from '../subscription';
 
 const Dashboard: React.FC = () => {
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
@@ -42,6 +43,7 @@ const Dashboard: React.FC = () => {
   const [userStats, setUserStats] = useState<any>(null);
   const [achievements, setAchievements] = useState<any[]>([]);
   const [weeklyQuests, setWeeklyQuests] = useState<any[]>([]);
+  const premiumActive = isPremiumActive();
 
   const showToast = (message: string, type: 'success' | 'info' | 'error' = 'info') => {
     const id = Math.random().toString(36).slice(2);
@@ -490,6 +492,18 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       </Card>
+
+      {/* Advanced Reports (Premium Gate) */}
+      {!premiumActive && (
+        <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-semibold text-[var(--app-text)]">Relatórios Avançados</h3>
+            <Badge className="bg-[var(--app-yellow)]15 text-[var(--app-yellow)] border-0">Premium</Badge>
+          </div>
+          <p className="text-sm text-[var(--app-text-light)] mb-3">Compare tendências semanais, correlações e previsões de produtividade.</p>
+          <button onClick={() => setShowPremium(true)} className="px-3 py-2 rounded-lg bg-[var(--app-blue)] text-white text-sm">Fazer upgrade</button>
+        </Card>
+      )}
 
       {/* Expenses Chart */}
       <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">

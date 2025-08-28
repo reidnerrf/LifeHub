@@ -337,13 +337,22 @@ const FinancesView: React.FC = () => {
       {/* Resumo mensal */}
       <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
         <h3 className="font-medium text-[var(--app-text)] mb-2">Resumo do Mês</h3>
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div className="p-3 rounded bg-[var(--app-green)]15 text-[var(--app-green)]">Entradas: R$ {monthlySummary.incomes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-          <div className="p-3 rounded bg-[var(--app-red)]15 text-[var(--app-red)]">Saídas: R$ {monthlySummary.expenses.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-          <div className="p-3 rounded bg-[var(--app-yellow)]15 text-[var(--app-yellow)]">A pagar: R$ {monthlySummary.payables.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-          <div className="p-3 rounded bg-[var(--app-blue)]15 text-[var(--app-blue)]">A receber: R$ {monthlySummary.receivs.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-        </div>
-        <div className="mt-3 text-sm text-[var(--app-text)]">Saldo: R$ {monthlySummary.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+        {premium ? (
+          <>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="p-3 rounded bg-[var(--app-green)]15 text-[var(--app-green)]">Entradas: R$ {monthlySummary.incomes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+              <div className="p-3 rounded bg-[var(--app-red)]15 text-[var(--app-red)]">Saídas: R$ {monthlySummary.expenses.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+              <div className="p-3 rounded bg-[var(--app-yellow)]15 text-[var(--app-yellow)]">A pagar: R$ {monthlySummary.payables.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+              <div className="p-3 rounded bg-[var(--app-blue)]15 text-[var(--app-blue)]">A receber: R$ {monthlySummary.receivs.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+            </div>
+            <div className="mt-3 text-sm text-[var(--app-text)]">Saldo: R$ {monthlySummary.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+          </>
+        ) : (
+          <div className="p-3 rounded-lg bg-[var(--app-yellow)]10 text-[var(--app-text)] text-sm flex items-center justify-between">
+            <span>Relatórios avançados são Premium.</span>
+            <button className="px-3 py-1 rounded bg-[var(--app-blue)] text-white text-xs" onClick={() => alert('Abra Configurações para assinar.')}>Upgrade</button>
+          </div>
+        )}
       </Card>
 
       {/* Categories Budget (Premium) */}

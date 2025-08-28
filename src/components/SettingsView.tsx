@@ -430,10 +430,24 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
         {selectedSection === 'integrations' && renderIntegrations()}
         {selectedSection === 'appearance' && (
           <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
-            <h3 className="font-medium text-[var(--app-text)] mb-4">Em breve...</h3>
-            <p className="text-sm text-[var(--app-text-light)]">
-              Configurações de aparência serão implementadas em breve.
-            </p>
+            <h3 className="font-medium text-[var(--app-text)] mb-4">Aparência</h3>
+            <div className="space-y-4">
+              <div>
+                <div className="text-sm text-[var(--app-text-light)] mb-2">Tema</div>
+                <div className="flex items-center space-x-2">
+                  <Button variant="outline">Claro</Button>
+                  <Button variant="outline">Escuro</Button>
+                  <Button variant="outline">Sistema</Button>
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-[var(--app-text-light)] mb-2">Personalização Avançada</div>
+                <div className="p-3 rounded-lg bg-[var(--app-yellow)]10 flex items-center justify-between">
+                  <span className="text-sm text-[var(--app-text)]">Temas extras, layouts e packs de ícones</span>
+                  <Button size="sm" onClick={() => setShowPremium(true)}>Premium</Button>
+                </div>
+              </div>
+            </div>
           </Card>
         )}
         {selectedSection === 'privacy' && (
