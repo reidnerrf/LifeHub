@@ -600,6 +600,7 @@ export default function Notes() {
   );
 }
 
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+
 import { 
   View, 
   Text, 
@@ -20,6 +21,7 @@ export default function Home() {
   const t = useTheme();
   const [suggestions, setSuggestions] = useState<{ id: string; title: string; description?: string }[]>([]);
   const [score, setScore] = useState<{ score: number; insights: string[] } | null>(null);
+
   const [todayItems, setTodayItems] = useState<any[]>([]);
   const [isListening, setIsListening] = useState(false);
   const [progressData, setProgressData] = useState<any[]>([]);
@@ -217,6 +219,7 @@ export default function Home() {
         <Ionicons name="add" size={24} color="#fff" />
       </TouchableOpacity>
     </View>
+
   );
 }
 

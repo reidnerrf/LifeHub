@@ -5,6 +5,7 @@ import GlobalSearch from './components/GlobalSearch';
 import { LoadingSpinner } from './components/ui/skeleton-components';
 import { useNavigationGestures } from './components/hooks/useGestures';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from './components/ui/sheet';
+
 import { storage, KEYS } from './services/storage';
 import { api } from './services/api';
 

@@ -22,6 +22,7 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Switch } from './ui/switch';
 import PremiumModal from './PremiumModal';
+
 import { storage, KEYS } from '../services/storage';
 import { isPremiumActive } from '../subscription';
 import { getLocale, setLocale } from '../i18n';
@@ -34,6 +35,7 @@ interface SettingsViewProps {
 const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [showPremium, setShowPremium] = useState(false);
+
   const [user, setUser] = useState(() => storage.get<any>(KEYS.user) || { id: 'guest', name: 'Convidado' });
   const [locale, setLoc] = useState(getLocale());
   const [subscription, setSubscription] = useState<any>(() => storage.get(KEYS.subscription));
@@ -218,6 +220,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
       badgeColor: 'var(--app-green)'
     },
     {
+
       id: 'voice-assistants',
       title: 'Assistentes de Voz',
       icon: <Microphone size={20} />,
@@ -328,6 +331,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
       </Card>
     </div>
   );
+
 
   const renderGeneral = () => (
     <div className="space-y-6">

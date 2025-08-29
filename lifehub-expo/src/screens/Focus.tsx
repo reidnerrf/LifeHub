@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+
 import { 
   View, 
   Text, 
@@ -578,4 +579,3 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
-

@@ -30,12 +30,14 @@ import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Cartesia
 import PremiumModal from './PremiumModal';
 import { aiOrchestrator } from '../services/aiOrchestrator';
 import { api } from '../services/api';
+
 import { storage, KEYS } from '../services/storage';
 import { isPremiumActive } from '../subscription';
 
 const Dashboard: React.FC = () => {
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
   const [showPremium, setShowPremium] = useState(false);
+
 
   const [isPremium, setIsPremium] = useState<boolean>(() => !!storage.get(KEYS.subscription));
 
@@ -265,6 +267,7 @@ const Dashboard: React.FC = () => {
         <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16" />
         <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full -ml-12 -mb-12" />
       </Card>
+
 
       {/* Integrations Shortcuts */}
       <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">

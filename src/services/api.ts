@@ -18,9 +18,10 @@ async function http(path: string, opts: RequestInit = {}): Promise<any> {
 export const api = {
   // Auth
   register: (payload: { email: string; password: string; name?: string }) => http('/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
-  login: (payload: { email: string; password: string }) => http('/auth/login', { method: 'POST', body: JSON.stringify(payload) }),
+
   // Subscriptions (stubs)
   createCheckout: (payload: { plan: 'monthly'|'annual'|'lifetime'|'trial' }) => Promise.resolve({ url: '#' }),
+
 
   // Tasks
   listTasks: () => http('/tasks'),
@@ -38,6 +39,10 @@ export const api = {
   listSuggestions: () => http('/ai/suggestions'),
   scorePlanning: (payload: any) => http('/ai/score-planning', { method: 'POST', body: JSON.stringify(payload) }),
   reschedule: (payload: any) => http('/ai/reschedule', { method: 'POST', body: JSON.stringify(payload) }),
+
+  // Integrations
+  importGoogle: () => http('/integrations/google/import', { method: 'POST' })
+
   predictDuration: (payload: any) => http('/ai/predict-duration', { method: 'POST', body: JSON.stringify(payload) }),
   bestSlot: (payload: any) => http('/ai/best-slot', { method: 'POST', body: JSON.stringify(payload) }),
 

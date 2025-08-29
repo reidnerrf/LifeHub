@@ -5,6 +5,7 @@ import mongoose, { Schema, model } from 'mongoose';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import pino from 'pino';
+
 import * as Sentry from '@sentry/node';
 
 dotenv.config();
@@ -55,6 +56,7 @@ const NoteSchema = new Schema({
   content: { type: String, default: '' },
   tags: [{ type: String }],
 }, { timestamps: true });
+
 const SuggestionSchema = new Schema({
   userId: { type: String, index: true },
   title: { type: String, required: true },
@@ -149,6 +151,7 @@ const AchievementSchema = new Schema({
 const User = model('User', UserSchema);
 const Task = model('Task', TaskSchema);
 const Note = model('Note', NoteSchema);
+
 const Suggestion = model('Suggestion', SuggestionSchema);
 const Event = model('Event', EventSchema);
 const Habit = model('Habit', HabitSchema);
@@ -193,6 +196,7 @@ const authMiddleware = (req: any, res: any, next: any) => {
       req.userId = decoded.sub;
     }
   } catch {}
+
   // fallback X-User-Id header
   if (!req.userId && req.headers['x-user-id']) {
     req.userId = String(req.headers['x-user-id']);
@@ -407,6 +411,7 @@ app.post('/ai/score-planning', (req, res) => {
 app.post('/ai/reschedule', (req, res) => {
   const { tasks = [], freeBlocks = [] } = req.body || {};
   const suggestions = [] as Array<{ taskId: string; suggestedStart: string; suggestedEnd: string; reason: string }>;
+
   const paddingPct = 0.15; // padding inteligente 15%
   const now = new Date();
   for (const task of tasks) {
@@ -425,6 +430,7 @@ app.post('/ai/reschedule', (req, res) => {
   }
   res.json({ suggestions });
 });
+
 
 // Google OAuth endpoints
 app.get('/integrations/google/auth-url', async (req: any, res) => {

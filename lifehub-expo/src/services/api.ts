@@ -31,7 +31,7 @@ export const api = {
   deleteNote: (id: string) => http(`/notes/${id}`, { method: 'DELETE' }),
   listSuggestions: () => http('/ai/suggestions'),
   scorePlanning: (payload: any) => http('/ai/score-planning', { method: 'POST', body: JSON.stringify(payload) }),
-  
+
   // Voice commands
   voiceCommand: (payload: { text: string; locale?: string }) => http('/assistant/voice/command', { method: 'POST', body: JSON.stringify(payload) }),
   
