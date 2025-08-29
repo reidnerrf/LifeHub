@@ -31,9 +31,77 @@ import PremiumModal from './PremiumModal';
 import { aiOrchestrator } from '../services/aiOrchestrator';
 import { api } from '../services/api';
 
+import { storage, KEYS } from '../services/storage';
+import { isPremiumActive } from '../subscription';
+
 const Dashboard: React.FC = () => {
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
   const [showPremium, setShowPremium] = useState(false);
+
+
+  const [isPremium, setIsPremium] = useState<boolean>(() => !!storage.get(KEYS.subscription));
+
+  const [toasts, setToasts] = useState<Array<{id: string; message: string; type: 'success' | 'info' | 'error'}>>([]);
+  const [showReschedule, setShowReschedule] = useState(false);
+  const [rescheduleSuggestions, setRescheduleSuggestions] = useState<any[]>([]);
+  const [userStats, setUserStats] = useState<any>(null);
+  const [achievements, setAchievements] = useState<any[]>([]);
+
+  const [weeklyQuests, setWeeklyQuests] = useState<any[]>([]);
+  const premiumActive = isPremiumActive();
+  const [showIdealWeek, setShowIdealWeek] = useState(false);
+  const [idealWeek, setIdealWeek] = useState<any>(null);
+  const [inboxText, setInboxText] = useState('');
+
+
+  const showToast = (message: string, type: 'success' | 'info' | 'error' = 'info') => {
+    const id = Math.random().toString(36).slice(2);
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+  };
+
+  const triggerReschedule = async () => {
+    try {
+      const suggestions = await api.orchestrateReschedule({
+        impactedTasks: [
+          { id: 'task1', title: 'Reunião cancelada', durationMin: 60 },
+          { id: 'task2', title: 'Relatório urgente', durationMin: 30 }
+        ],
+        nextBlocks: [
+          { start: new Date(Date.now() + 30 * 60000).toISOString() },
+          { start: new Date(Date.now() + 90 * 60000).toISOString() }
+        ]
+      });
+      setRescheduleSuggestions(suggestions.suggestions || []);
+      setShowReschedule(true);
+    } catch (e) {
+      showToast('Erro ao buscar reagendamentos', 'error');
+    }
+  };
+
+  // Load gamification data
+  useEffect(() => {
+    const loadGamification = async () => {
+      try {
+        const [stats, achievementsList] = await Promise.all([
+          api.getStats(),
+          api.getAchievements()
+        ]);
+        setUserStats(stats);
+        setAchievements(achievementsList);
+      } catch (e) {
+        console.error('Error loading gamification data:', e);
+      }
+    };
+    loadGamification();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try { setWeeklyQuests(await api.getQuests()); } catch {}
+    })();
+  }, []);
+
 
   // Sample data for charts
   const productivityData = [
@@ -200,6 +268,18 @@ const Dashboard: React.FC = () => {
         <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full -ml-12 -mb-12" />
       </Card>
 
+
+      {/* Integrations Shortcuts */}
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <h3 className="font-medium text-[var(--app-text)] mb-4">Integrações</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={async () => { try { const res = await api.googleAuthUrl(); window.open(res.url, '_blank'); } catch {} }} className="p-3 rounded-xl bg-[var(--app-light-gray)]">Google Calendar</button>
+          <button onClick={async () => { try { const res = await api.outlookAuthUrl(); window.open(res.url, '_blank'); } catch {} }} className="p-3 rounded-xl bg-[var(--app-light-gray)]">Outlook</button>
+          <button onClick={async () => { try { const res = await api.trelloImport({ csvUrl: 'https://example.com/board.csv' }); showToast(`Trello importados: ${res.imported}`, 'success'); } catch { showToast('Falha Trello', 'error'); } }} className="p-3 rounded-xl bg-[var(--app-light-gray)]">Trello CSV</button>
+          <button onClick={async () => { try { const res = await api.importGoogle(); showToast(`Google eventos importados: ${res.imported}`, 'success'); } catch { showToast('Falha Google', 'error'); } }} className="p-3 rounded-xl bg-[var(--app-light-gray)]">Importar Google</button>
+        </div>
+      </Card>
+
       {/* Auto-rescheduler */}
       <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
         <div className="flex items-center justify-between mb-3">
@@ -210,7 +290,7 @@ const Dashboard: React.FC = () => {
               try {
                 const payload = { tasks: [{ id: 't1', durationMin: 30 }], freeBlocks: [{ start: new Date().toISOString(), end: new Date(Date.now()+60*60*1000).toISOString() }] };
                 const res = await api.reschedule(payload);
-                alert(`Sugestões: ${res.suggestions.map(s => `${s.taskId} -> ${new Date(s.suggestedStart).toLocaleTimeString('pt-BR')}`).join(', ')}`);
+                alert(`Sugestões: ${res.suggestions.map((s: any) => `${s.taskId} ${new Date(s.suggestedStart).toLocaleTimeString('pt-BR')} (${s.reason})`).join('\n')}`);
               } catch (e) {
                 alert('Não foi possível gerar sugestões agora.');
               }
@@ -291,7 +371,9 @@ const Dashboard: React.FC = () => {
               <Sparkles size={18} className="text-[var(--app-blue)]" />
               <h3 className="font-medium text-[var(--app-text)]">Sugestões da IA</h3>
             </div>
-            <button onClick={() => setShowPremium(true)} className="text-xs px-3 py-1 rounded-lg bg-[var(--app-blue)] text-white">Desbloquear Premium</button>
+            {!isPremium && (
+              <button onClick={() => setShowPremium(true)} className="text-xs px-3 py-1 rounded-lg bg-[var(--app-blue)] text-white">Desbloquear Premium</button>
+            )}
           </div>
           <div className="space-y-3">
             {aiSuggestions.map(s => (
@@ -300,6 +382,33 @@ const Dashboard: React.FC = () => {
                 {s.description && (
                   <div className="text-xs text-[var(--app-text-light)] mt-1">{s.description}</div>
                 )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Weekly Quests */}
+      {weeklyQuests.length > 0 && (
+        <Card className="p-5 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-2">
+              <Trophy size={18} className="text-[var(--app-purple)]" />
+              <h3 className="font-medium text-[var(--app-text)]">Quests da Semana</h3>
+            </div>
+            <button onClick={async () => { try { setWeeklyQuests(await api.refreshQuests()); } catch {} }} className="text-xs px-3 py-1 rounded-lg bg-[var(--app-light-gray)]">Atualizar</button>
+          </div>
+          <div className="space-y-3">
+            {weeklyQuests.map((q) => (
+              <div key={q._id} className="p-3 rounded-xl bg-[var(--app-light-gray)] flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-[var(--app-text)]">{q.title}</div>
+                  <div className="text-xs text-[var(--app-text-light)]">{q.progress}/{q.target}</div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button onClick={async () => { try { await api.progressQuest(q._id, 1); setWeeklyQuests(await api.getQuests()); } catch {} }} className="px-2 py-1 text-xs rounded bg-[var(--app-blue)] text-white">+1</button>
+                  {q.completed && <Badge className="bg-[var(--app-green)]15 text-[var(--app-green)]">Concluída</Badge>}
+                </div>
               </div>
             ))}
           </div>
@@ -394,6 +503,18 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       </Card>
+
+      {/* Advanced Reports (Premium Gate) */}
+      {!premiumActive && (
+        <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm" ribbon={<span className="px-2 py-1 rounded bg-[var(--app-yellow)] text-white text-[10px]">Premium</span>}>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-semibold text-[var(--app-text)]">Relatórios Avançados</h3>
+            <Badge className="bg-[var(--app-yellow)]15 text-[var(--app-yellow)] border-0">Premium</Badge>
+          </div>
+          <p className="text-sm text-[var(--app-text-light)] mb-3">Compare tendências semanais, correlações e previsões de produtividade.</p>
+          <button onClick={() => setShowPremium(true)} className="px-3 py-2 rounded-lg bg-[var(--app-blue)] text-white text-sm">Fazer upgrade</button>
+        </Card>
+      )}
 
       {/* Expenses Chart */}
       <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
@@ -511,29 +632,207 @@ const Dashboard: React.FC = () => {
         </div>
       </Card>
 
+      {/* Gamification Stats */}
+      {userStats && (
+        <Card className="p-6 bg-gradient-to-r from-[var(--app-purple)] to-[var(--app-blue)] rounded-2xl border-0 shadow-sm text-white">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="font-medium text-white">Nível {userStats.level}</h3>
+              <p className="text-white/80 text-sm">Progresso para o próximo nível</p>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-bold">{userStats.points}</div>
+              <div className="text-sm text-white/80">pontos</div>
+            </div>
+          </div>
+          <div className="mb-4">
+            <div className="flex justify-between text-sm mb-1">
+              <span>Nível {userStats.level}</span>
+              <span>Nível {userStats.level + 1}</span>
+            </div>
+            <div className="w-full bg-white/20 rounded-full h-2">
+              <div 
+                className="bg-white h-2 rounded-full transition-all"
+                style={{ width: `${((userStats.points % 100) / 100) * 100}%` }}
+              />
+            </div>
+          </div>
+          {achievements.length > 0 && (
+            <div className="flex items-center space-x-2">
+              <Trophy size={16} className="text-[var(--app-yellow)]" />
+              <span className="text-sm">{achievements.length} conquistas desbloqueadas</span>
+            </div>
+          )}
+        </Card>
+      )}
+
       {/* Quick Actions */}
       <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
         <h3 className="font-medium text-[var(--app-text)] mb-4">Ações Rápidas</h3>
         <div className="grid grid-cols-2 gap-4">
-          <button className="flex items-center space-x-3 p-4 bg-[var(--app-blue)]15 rounded-xl hover:bg-[var(--app-blue)]20 transition-all group">
+          <button
+            onClick={async () => {
+              try {
+                const insights = await api.weeklyInsights();
+                if (insights.insights && insights.insights.length > 0) {
+                  const topInsight = insights.insights[0];
+                  showToast(`${topInsight.title}: ${topInsight.text}`, 'info');
+                } else {
+                  showToast('Nenhum insight disponível ainda', 'info');
+                }
+              } catch (e) {
+                showToast('Erro ao buscar insights', 'error');
+              }
+            }}
+            className="flex items-center space-x-3 p-4 bg-[var(--app-blue)]15 rounded-xl hover:bg-[var(--app-blue)]20 transition-all group">
             <Brain size={20} style={{ color: 'var(--app-blue)' }} />
             <span className="text-sm font-medium text-[var(--app-text)] group-hover:text-[var(--app-blue)] transition-colors">Sessão Foco</span>
           </button>
-          <button className="flex items-center space-x-3 p-4 bg-[var(--app-green)]15 rounded-xl hover:bg-[var(--app-green)]20 transition-all group">
+          <button
+            onClick={async () => {
+              try {
+                const opp = await api.findOpportunities(30);
+                if (opp && opp.length > 0) {
+                  showToast(`Oportunidade: ${opp[0].title}`, 'info');
+                } else {
+                  showToast('Nenhuma oportunidade encontrada', 'info');
+                }
+              } catch (e) {
+                showToast('Erro ao buscar oportunidades', 'error');
+              }
+            }}
+            className="flex items-center space-x-3 p-4 bg-[var(--app-green)]15 rounded-xl hover:bg-[var(--app-green)]20 transition-all group">
             <Heart size={20} style={{ color: 'var(--app-green)' }} />
             <span className="text-sm font-medium text-[var(--app-text)] group-hover:text-[var(--app-green)] transition-colors">Bem-estar</span>
           </button>
-          <button className="flex items-center space-x-3 p-4 bg-[var(--app-yellow)]15 rounded-xl hover:bg-[var(--app-yellow)]20 transition-all group">
+          <button
+            onClick={triggerReschedule}
+            className="flex items-center space-x-3 p-4 bg-[var(--app-yellow)]15 rounded-xl hover:bg-[var(--app-yellow)]20 transition-all group">
             <MessageCircle size={20} style={{ color: 'var(--app-yellow)' }} />
             <span className="text-sm font-medium text-[var(--app-text)] group-hover:text-[var(--app-yellow)] transition-colors">Assistente IA</span>
           </button>
-          <button className="flex items-center space-x-3 p-4 bg-[var(--app-purple)]15 rounded-xl hover:bg-[var(--app-purple)]20 transition-all group">
+          <button
+            onClick={async () => {
+
+              try { const s = await api.bestSlot({ durationMin: 45 }); showToast(`Melhor horário: ${new Date(s.suggestedStart).toLocaleString('pt-BR')} (${s.reason})`, 'info'); } catch { showToast('Erro ao sugerir horário', 'error'); }
+            }}
+            className="flex items-center space-x-3 p-4 bg-[var(--app-purple)]15 rounded-xl hover:bg-[var(--app-purple)]20 transition-all group">
+            <Zap size={20} style={{ color: 'var(--app-purple)' }} />
+            <span className="text-sm font-medium text-[var(--app-text)] group-hover:text-[var(--app-purple)] transition-colors">Melhor horário</span>
+          </button>
+          <button
+            onClick={async () => {
+
+              try {
+                const windowResp = await api.nextNotificationWindow({ candidateWindows: [{ start: new Date().toISOString(), end: new Date(Date.now()+30*60000).toISOString() }] });
+                showToast(`Próxima notificação: score ${Math.round(windowResp.score * 100)}%`, 'info');
+              } catch (e) {
+                showToast('Erro ao calcular janela', 'error');
+              }
+            }}
+            className="flex items-center space-x-3 p-4 bg-[var(--app-purple)]15 rounded-xl hover:bg-[var(--app-purple)]20 transition-all group">
             <Coffee size={20} style={{ color: 'var(--app-purple)' }} />
             <span className="text-sm font-medium text-[var(--app-text)] group-hover:text-[var(--app-purple)] transition-colors">Pausa</span>
+          </button>
+          <button
+            onClick={async () => {
+              try { const res = await api.idealWeek({}); setIdealWeek(res); setShowIdealWeek(true); } catch { showToast('Erro ao gerar Semana Ideal', 'error'); }
+            }}
+            className="flex items-center space-x-3 p-4 bg-[var(--app-blue)]15 rounded-xl hover:bg-[var(--app-blue)]20 transition-all group">
+            <Calendar size={20} style={{ color: 'var(--app-blue)' }} />
+            <span className="text-sm font-medium text-[var(--app-text)] group-hover:text-[var(--app-blue)] transition-colors">Semana Ideal</span>
           </button>
         </div>
       </Card>
       <PremiumModal open={showPremium} onClose={() => setShowPremium(false)} />
+
+
+      {/* Inbox universal (stub) */}
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <h3 className="font-medium text-[var(--app-text)] mb-3">Inbox</h3>
+        <div className="flex items-center space-x-2">
+          <input value={inboxText} onChange={e => setInboxText(e.target.value)} placeholder="Capture algo rápido..." className="flex-1 p-3 rounded-xl bg-[var(--app-light-gray)] border-0" />
+          <button onClick={async () => { const title = inboxText.trim(); if (!title) return; try { await api.createTask({ title, completed: false }); showToast('Adicionado às tarefas', 'success'); setInboxText(''); } catch { showToast('Falha ao adicionar', 'error'); } }} className="px-3 py-2 rounded-xl bg-[var(--app-blue)] text-white text-sm">Adicionar</button>
+          <button className="px-3 py-2 rounded-xl bg-[var(--app-light-gray)] text-sm">Voz</button>
+          <button className="px-3 py-2 rounded-xl bg-[var(--app-light-gray)] text-sm">WhatsApp</button>
+        </div>
+      </Card>
+
+      {showIdealWeek && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowIdealWeek(false)}>
+          <div className="w-full max-w-md m-4 p-6 rounded-2xl bg-[var(--app-card)] border border-[var(--app-light-gray)]" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-[var(--app-text)]">Semana Ideal</h3>
+              <button onClick={() => setShowIdealWeek(false)} className="p-2 rounded-lg hover:bg-[var(--app-light-gray)]">✕</button>
+            </div>
+            <div className="space-y-3 max-h-80 overflow-auto">
+              {(idealWeek?.blocks || []).map((b: any, i: number) => (
+                <div key={i} className="p-3 rounded-xl bg-[var(--app-light-gray)]">
+                  <div className="text-sm text-[var(--app-text)]">{b.day} • {b.type}</div>
+                  <div className="text-xs text-[var(--app-text-light)]">{b.start} - {b.end}</div>
+                </div>
+              ))}
+              {idealWeek?.guidance && <div className="text-sm text-[var(--app-text)]">{idealWeek.guidance}</div>}
+            </div>
+            <button onClick={() => { showToast('Semana Ideal aplicada!', 'success'); setShowIdealWeek(false); }} className="mt-4 w-full py-2 bg-[var(--app-blue)] text-white rounded-lg text-sm">Aplicar</button>
+          </div>
+        </div>
+      )}
+
+
+      {/* Reschedule Modal */}
+      {showReschedule && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md m-4 p-6 rounded-2xl bg-[var(--app-card)] border border-[var(--app-light-gray)]">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-[var(--app-text)]">Reagendamento Sugerido</h3>
+              <button
+                onClick={() => setShowReschedule(false)}
+                className="p-2 rounded-lg hover:bg-[var(--app-light-gray)]"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-3">
+              {rescheduleSuggestions.map((suggestion, idx) => (
+                <div key={idx} className="p-3 border border-[var(--app-light-gray)] rounded-xl">
+                  <div className="text-sm text-[var(--app-text)] mb-1">
+                    {suggestion.reason}
+                  </div>
+                  <div className="text-xs text-[var(--app-text-light)]">
+                    {new Date(suggestion.suggestedStart).toLocaleTimeString()} - {new Date(suggestion.suggestedEnd).toLocaleTimeString()}
+                  </div>
+                  <button
+                    onClick={() => {
+                      showToast('Reagendamento aplicado!', 'success');
+                      setShowReschedule(false);
+                    }}
+                    className="mt-2 w-full py-2 bg-[var(--app-blue)] text-white rounded-lg text-sm"
+                  >
+                    Aplicar 1‑toque
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast notifications */}
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        {toasts.map(toast => (
+          <div
+            key={toast.id}
+            className={`px-4 py-3 rounded-xl shadow-lg max-w-sm transition-all ${
+              toast.type === 'success' ? 'bg-[var(--app-green)] text-white' :
+              toast.type === 'error' ? 'bg-[var(--app-red)] text-white' :
+              'bg-[var(--app-blue)] text-white'
+            }`}
+          >
+            {toast.message}
+          </div>
+        ))}
+      </div>
     </div>
   );
 };

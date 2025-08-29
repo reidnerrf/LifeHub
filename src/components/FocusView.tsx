@@ -5,6 +5,8 @@ import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Timer } from './ui/timer';
 
+import { api } from '../services/api';
+
 const FocusView: React.FC = () => {
   const [timeLeft, setTimeLeft] = useState(25 * 60); // 25 minutos em segundos
   const [isActive, setIsActive] = useState(false);
@@ -28,6 +30,8 @@ const FocusView: React.FC = () => {
   ];
 
   const [selectedSound, setSelectedSound] = useState('none');
+  const [scene, setScene] = useState<'classic'|'rain'|'forest'|'cafe'>('classic');
+  const [ritualChecklist, setRitualChecklist] = useState<string[]>([]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
@@ -97,6 +101,18 @@ const FocusView: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    // Load ritual suggestions for scene
+    (async () => {
+      try {
+        const r = await api.ritualsSuggestions();
+        setRitualChecklist(scene === 'classic' ? ['Preparar ambiente','Silenciar celular','Definir objetivo'] : (r.postLunch || []));
+      } catch {
+        setRitualChecklist(['Preparar ambiente','Silenciar celular','Definir objetivo']);
+      }
+    })();
+  }, [scene]);
+
   const totalTime = sessionDurations[sessionType];
   const progress = ((totalTime - timeLeft) / totalTime) * 100;
 
@@ -155,6 +171,13 @@ const FocusView: React.FC = () => {
           <Coffee size={16} className="inline mr-2" />
           Pausa
         </button>
+      </div>
+
+      {/* Scenes */}
+      <div className="flex space-x-2">
+        {(['classic','rain','forest','cafe'] as const).map(s => (
+          <button key={s} onClick={() => { setScene(s); setSelectedSound(s === 'classic' ? 'none' : s); }} className={`px-3 py-1 rounded-lg text-sm ${scene===s?'bg-[var(--app-purple)] text-white':'bg-[var(--app-light-gray)]'}`}>{s}</button>
+        ))}
       </div>
 
       {/* Timer Card */}
@@ -305,6 +328,16 @@ const FocusView: React.FC = () => {
           <div className="text-sm text-[var(--app-text-light)]">Tempo focado hoje</div>
         </Card>
       </div>
+
+      {/* Ritual Checklist */}
+      <Card className="p-4 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <h4 className="font-medium text-[var(--app-text)] mb-2">Ritual</h4>
+        <ul className="list-disc ml-5 text-sm text-[var(--app-text)]">
+          {ritualChecklist.map((r, i) => (
+            <li key={i}>{r}</li>
+          ))}
+        </ul>
+      </Card>
     </div>
   );
 };
