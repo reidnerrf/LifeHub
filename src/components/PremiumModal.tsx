@@ -51,6 +51,7 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ open, onClose }) => {
             <button onClick={onClose} className="px-4 py-2 rounded-xl border border-[var(--app-light-gray)]">Agora não</button>
             <button className="px-4 py-2 rounded-xl text-white" style={{ backgroundColor: 'var(--app-blue)' }}>Assinar</button>
           </div>
+
         </div>
       </div>
     </div>

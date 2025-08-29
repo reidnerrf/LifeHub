@@ -36,17 +36,21 @@ import { isPremiumActive } from '../subscription';
 const Dashboard: React.FC = () => {
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
   const [showPremium, setShowPremium] = useState(false);
+
   const [isPremium, setIsPremium] = useState<boolean>(() => !!storage.get(KEYS.subscription));
+
   const [toasts, setToasts] = useState<Array<{id: string; message: string; type: 'success' | 'info' | 'error'}>>([]);
   const [showReschedule, setShowReschedule] = useState(false);
   const [rescheduleSuggestions, setRescheduleSuggestions] = useState<any[]>([]);
   const [userStats, setUserStats] = useState<any>(null);
   const [achievements, setAchievements] = useState<any[]>([]);
+
   const [weeklyQuests, setWeeklyQuests] = useState<any[]>([]);
   const premiumActive = isPremiumActive();
   const [showIdealWeek, setShowIdealWeek] = useState(false);
   const [idealWeek, setIdealWeek] = useState<any>(null);
   const [inboxText, setInboxText] = useState('');
+
 
   const showToast = (message: string, type: 'success' | 'info' | 'error' = 'info') => {
     const id = Math.random().toString(36).slice(2);
@@ -95,6 +99,7 @@ const Dashboard: React.FC = () => {
       try { setWeeklyQuests(await api.getQuests()); } catch {}
     })();
   }, []);
+
 
   // Sample data for charts
   const productivityData = [
@@ -705,6 +710,7 @@ const Dashboard: React.FC = () => {
           </button>
           <button
             onClick={async () => {
+
               try { const s = await api.bestSlot({ durationMin: 45 }); showToast(`Melhor horário: ${new Date(s.suggestedStart).toLocaleString('pt-BR')} (${s.reason})`, 'info'); } catch { showToast('Erro ao sugerir horário', 'error'); }
             }}
             className="flex items-center space-x-3 p-4 bg-[var(--app-purple)]15 rounded-xl hover:bg-[var(--app-purple)]20 transition-all group">
@@ -713,6 +719,7 @@ const Dashboard: React.FC = () => {
           </button>
           <button
             onClick={async () => {
+
               try {
                 const windowResp = await api.nextNotificationWindow({ candidateWindows: [{ start: new Date().toISOString(), end: new Date(Date.now()+30*60000).toISOString() }] });
                 showToast(`Próxima notificação: score ${Math.round(windowResp.score * 100)}%`, 'info');
@@ -735,6 +742,7 @@ const Dashboard: React.FC = () => {
         </div>
       </Card>
       <PremiumModal open={showPremium} onClose={() => setShowPremium(false)} />
+
 
       {/* Inbox universal (stub) */}
       <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
@@ -767,6 +775,7 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       )}
+
 
       {/* Reschedule Modal */}
       {showReschedule && (

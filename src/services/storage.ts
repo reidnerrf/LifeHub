@@ -24,6 +24,7 @@ export const storage = {
 
 export default storage;
 
+
 export const KEYS = {
   theme: 'themePreference',
   onboarding: 'onboardingPreferences',

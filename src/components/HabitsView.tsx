@@ -1,14 +1,20 @@
+
 import React, { useEffect, useMemo, useState } from 'react';
+
 import { CheckCircle, Circle, Flame, Target, TrendingUp, Heart, Zap, Moon } from 'lucide-react';
 import { Card } from './ui/card';
 import { Progress } from './ui/progress';
 import { api } from '../services/api';
+
 import { storage, KEYS } from '../services/storage';
+
 
 const HabitsView: React.FC = () => {
   const [showCheckin, setShowCheckin] = useState(false);
   const [checkinData, setCheckinData] = useState({ mood: 3, energy: 3, sleepHours: 7 });
+
   const [habits, setHabits] = useState(() => storage.get<any[]>(KEYS.habits) || [
+
     {
       id: 1,
       name: 'Beber 8 copos de água',

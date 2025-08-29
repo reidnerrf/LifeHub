@@ -87,6 +87,7 @@ const EventSchema = new Schema({
   }],
   externalId: { type: String }, // Para sincronização com Google/Outlook
   externalSource: { type: String, enum: ['google', 'outlook', 'local'], default: 'local' },
+
   source: { type: String, default: 'local' }
 }, { timestamps: true });
 
@@ -96,6 +97,7 @@ const HabitSchema = new Schema({
   schedule: { type: String, default: 'daily' },
   target: { type: Number, default: 1 }
 }, { timestamps: true });
+
 
 const PomodoroSessionSchema = new Schema({
   userId: { type: String, index: true },
@@ -150,7 +152,9 @@ const Note = model('Note', NoteSchema);
 const Suggestion = model('Suggestion', SuggestionSchema);
 const Event = model('Event', EventSchema);
 const Habit = model('Habit', HabitSchema);
+
 const PomodoroSession = model('PomodoroSession', PomodoroSessionSchema);
+
 const Checkin = model('Checkin', CheckinSchema);
 const Transaction = model('Transaction', TransactionSchema);
 const UserStats = model('UserStats', UserStatsSchema);
@@ -177,6 +181,7 @@ const WeeklyQuestSchema = new Schema({
   completed: { type: Boolean, default: false }
 }, { timestamps: true });
 const WeeklyQuest = model('WeeklyQuest', WeeklyQuestSchema);
+
 
 // Auth
 const authMiddleware = (req: any, res: any, next: any) => {
@@ -673,6 +678,7 @@ app.post('/orchestrator/schedule', async (req: any, res) => {
     if (task.score >= 50) reason = 'Alta prioridade + energia ideal';
     else if (task.score >= 35) reason = 'Prioridade média + bom momento';
     else reason = 'Slot disponível';
+
     reason += ' • sono/energia considerados';
     reason += ' • padding 15%';
     return { 
@@ -950,10 +956,12 @@ app.get('/integrations/siri/shortcut', (req: any, res) => {
   res.json({ ok: true, parsed });
 });
 
+
 app.get('/orchestrator/opportunities', async (req: any, res) => {
   const { minutes = 30 } = req.query as any;
   res.json([{ id: 'opp1', title: `Você tem ${minutes}min livres`, suggestion: 'Adiantar tarefa de alta prioridade' }]);
 });
+
 
 // Timeline unificada de hoje
 app.get('/today/items', async (req: any, res) => {
@@ -1054,6 +1062,7 @@ app.get('/today/items', async (req: any, res) => {
     res.status(500).json({ error: 'Erro ao buscar itens de hoje' });
   }
 });
+
 
 // Enhanced Notifications targeting with smart timing
 app.post('/notifications/next-window', async (req: any, res) => {

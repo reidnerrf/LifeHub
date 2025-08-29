@@ -43,6 +43,7 @@ export const api = {
 
   // Integrations
   importGoogle: () => http('/integrations/google/import', { method: 'POST' }),
+
   googleAuthUrl: () => http('/integrations/google/auth-url'),
   googleOauthCallback: (payload: { code: string; redirectUri?: string }) => http('/integrations/google/oauth/callback', { method: 'POST', body: JSON.stringify(payload) }),
   googleEvents: () => http('/integrations/google/events'),
@@ -50,11 +51,14 @@ export const api = {
   outlookImport: () => http('/integrations/outlook/import', { method: 'POST' }),
   trelloImport: (payload: { csvUrl?: string; items?: any[] }) => http('/integrations/trello/import', { method: 'POST', body: JSON.stringify(payload) }),
 
+
   // Orchestrator
   orchestrateSchedule: (payload: any) => http('/orchestrator/schedule', { method: 'POST', body: JSON.stringify(payload) }),
   orchestrateReschedule: (payload: any) => http('/orchestrator/reschedule', { method: 'POST', body: JSON.stringify(payload) }),
   findOpportunities: (minutes: number) => http(`/orchestrator/opportunities?minutes=${encodeURIComponent(minutes)}`),
+
   idealWeek: (payload: any) => http('/ai/ideal-week', { method: 'POST', body: JSON.stringify(payload) }),
+
 
   // Notifications targeting
   nextNotificationWindow: (payload: any) => http('/notifications/next-window', { method: 'POST', body: JSON.stringify(payload) }),
@@ -65,18 +69,26 @@ export const api = {
 
   // Reports
   weeklyInsights: () => http('/reports/weekly-insights'),
+
   weeklyDispatch: () => http('/reports/weekly/dispatch', { method: 'POST' }),
+
 
   // Assistant
   planWeek: (payload: any) => http('/assistant/plan-week', { method: 'POST', body: JSON.stringify(payload) }),
   ritualPreDeepWork: (payload: any) => http('/assistant/ritual/pre-deep-work', { method: 'POST', body: JSON.stringify(payload) }),
+
   ritualsSuggestions: () => http('/rituals/suggestions'),
+
 
   // Check-ins
   createCheckin: (data: any) => http('/checkins', { method: 'POST', body: JSON.stringify(data) }),
 
   // Gamification
   getStats: () => http('/gamification/stats'),
+
+  getAchievements: () => http('/gamification/achievements'),
+  completeTask: (taskId: string) => http('/gamification/complete-task', { method: 'POST', body: JSON.stringify({ taskId }) })
+
   // Routes/Transit
   estimateRoute: (payload: { from: string; to: string; mode?: 'driving'|'transit' }) => http('/integrations/routes/estimate', { method: 'POST', body: JSON.stringify(payload) }),
 
@@ -106,5 +118,6 @@ export const api = {
   getQuests: () => http('/gamification/quests'),
   progressQuest: (id: string, delta = 1) => http(`/gamification/quests/${id}/progress`, { method: 'POST', body: JSON.stringify({ delta }) }),
   refreshQuests: () => http('/gamification/quests/refresh', { method: 'POST' })
+
 };
 
