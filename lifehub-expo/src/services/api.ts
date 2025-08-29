@@ -31,5 +31,17 @@ export const api = {
   deleteNote: (id: string) => http(`/notes/${id}`, { method: 'DELETE' }),
   listSuggestions: () => http('/ai/suggestions'),
   scorePlanning: (payload: any) => http('/ai/score-planning', { method: 'POST', body: JSON.stringify(payload) }),
+  
+  // Voice commands
+  voiceCommand: (payload: { text: string; locale?: string }) => http('/assistant/voice/command', { method: 'POST', body: JSON.stringify(payload) }),
+  
+  // Timeline unificada
+  listTodayItems: () => http('/today/items'),
+  
+  // Events
+  listEvents: () => http('/events'),
+  createEvent: (data: any) => http('/events', { method: 'POST', body: JSON.stringify(data) }),
+  updateEvent: (id: string, data: any) => http(`/events/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteEvent: (id: string) => http(`/events/${id}`, { method: 'DELETE' }),
 };
 
