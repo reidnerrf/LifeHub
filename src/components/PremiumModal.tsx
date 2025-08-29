@@ -30,9 +30,28 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ open, onClose }) => {
           <div>• Recomendações personalizadas de hábitos e tarefas</div>
           <div>• Exportação de dados e integrações</div>
         </div>
-        <div className="mt-6 flex items-center justify-end space-x-2">
-          <button onClick={onClose} className="px-4 py-2 rounded-xl border border-[var(--app-light-gray)]">Agora não</button>
-          <button className="px-4 py-2 rounded-xl text-white" style={{ backgroundColor: 'var(--app-blue)' }}>Assinar</button>
+        <div className="mt-6 grid grid-cols-1 gap-3 text-sm">
+          <div className="p-3 rounded-xl border border-[var(--app-light-gray)]">
+            <div className="font-medium text-[var(--app-text)]">Mensal</div>
+            <div className="text-[var(--app-text-light)]">R$ 19,90/mês</div>
+          </div>
+          <div className="p-3 rounded-xl border border-[var(--app-light-gray)]">
+            <div className="font-medium text-[var(--app-text)]">Anual (Bundle)</div>
+            <div className="text-[var(--app-text-light)]">R$ 149,90/ano</div>
+          </div>
+          <div className="p-3 rounded-xl border border-[var(--app-light-gray)]">
+            <div className="font-medium text-[var(--app-text)]">Vitalício</div>
+            <div className="text-[var(--app-text-light)]">R$ 399,90 uma vez</div>
+          </div>
+          <div className="p-3 rounded-xl border border-[var(--app-light-gray)]">
+            <div className="font-medium text-[var(--app-text)]">Teste grátis</div>
+            <div className="text-[var(--app-text-light)]">7–14 dias</div>
+          </div>
+          <div className="flex items-center justify-end space-x-2">
+            <button onClick={onClose} className="px-4 py-2 rounded-xl border border-[var(--app-light-gray)]">Agora não</button>
+            <button className="px-4 py-2 rounded-xl text-white" style={{ backgroundColor: 'var(--app-blue)' }}>Assinar</button>
+          </div>
+
         </div>
       </div>
     </div>

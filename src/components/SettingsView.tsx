@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   ArrowLeft, 
   Bell, 
@@ -22,6 +22,10 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Switch } from './ui/switch';
 import PremiumModal from './PremiumModal';
+import { storage, KEYS } from '../services/storage';
+import { isPremiumActive } from '../subscription';
+import { getLocale, setLocale } from '../i18n';
+import { api } from '../services/api';
 
 interface SettingsViewProps {
   onBack: () => void;
@@ -30,6 +34,20 @@ interface SettingsViewProps {
 const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [showPremium, setShowPremium] = useState(false);
+  const [user, setUser] = useState(() => storage.get<any>(KEYS.user) || { id: 'guest', name: 'Convidado' });
+  const [locale, setLoc] = useState(getLocale());
+  const [subscription, setSubscription] = useState<any>(() => storage.get(KEYS.subscription));
+  const trialInfo = (() => {
+    if (!subscription || subscription.plan !== 'trial') return null;
+    const started = new Date(subscription.startedAt || Date.now());
+    const duration = Number(subscription.durationDays || 7);
+    const end = new Date(started.getTime() + duration * 24 * 60 * 60 * 1000);
+    const now = new Date();
+    const msLeft = end.getTime() - now.getTime();
+    const daysLeft = Math.max(0, Math.ceil(msLeft / (24 * 60 * 60 * 1000)));
+    const expired = msLeft <= 0;
+    return { daysLeft, expired, end };
+  })();
 
   const [notificationSettings, setNotificationSettings] = useState({
     pushEnabled: true,
@@ -41,6 +59,17 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
     weeklyReports: true,
     achievementAlerts: true,
   });
+
+  // Accessibility & Privacy
+  const [highContrast, setHighContrast] = useState<boolean>(() => !!storage.get(KEYS.accessibilityHighContrast));
+  const [fontScale, setFontScale] = useState<number>(() => storage.get<number>(KEYS.accessibilityFontScale) || 1);
+  const [localAI, setLocalAI] = useState<boolean>(() => !!storage.get(KEYS.privacyLocalAI));
+  const [dataShare, setDataShare] = useState<boolean>(() => storage.get(KEYS.privacyDataShare) !== false);
+
+  // Modes
+  const [modes, setModes] = useState<any>(null);
+  const [mode, setMode] = useState<string>(() => (storage.get<string>(KEYS.mode) as any) || 'default');
+  useEffect(() => { (async () => { try { setModes(await api.modesPresets()); } catch {} })(); }, []);
 
   const [integrations, setIntegrations] = useState([
     {
@@ -101,6 +130,33 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
       status: 'active',
       lastSync: '2025-08-26T11:00:00Z',
       features: ['Playlists de foco', 'Controle de reprodução', 'Estatísticas']
+    },
+    {
+      id: 'notion',
+      name: 'Notion',
+      description: 'Sync unidirecional de páginas para o LifeHub',
+      icon: <ExternalLink size={20} />,
+      connected: false,
+      status: 'available',
+      features: ['Importar páginas', 'Sincronização manual']
+    },
+    {
+      id: 'slack',
+      name: 'Slack/Teams',
+      description: 'Atualiza seu status para Foco automaticamente',
+      icon: <ExternalLink size={20} />,
+      connected: false,
+      status: 'available',
+      features: ['Status Foco', 'Silenciar notificações']
+    },
+    {
+      id: 'wearables',
+      name: 'Wearables',
+      description: 'Apple Watch/WearOS para hábitos e foco',
+      icon: <Smartphone size={20} />,
+      connected: false,
+      status: 'available',
+      features: ['Passos', 'Foco', 'Batimentos']
     }
   ]);
 
@@ -130,6 +186,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
       badgeColor: 'var(--app-purple)'
     },
     {
+      id: 'accessibility',
+      title: 'Acessibilidade',
+      icon: <Smartphone size={20} />,
+      description: 'Fonte e alto contraste',
+      badge: `${Math.round((fontScale||1)*100)}%`,
+      badgeColor: 'var(--app-green)'
+    },
+    {
       id: 'privacy',
       title: 'Privacidade',
       icon: <Shield size={20} />,
@@ -138,12 +202,44 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
       badgeColor: 'var(--app-green)'
     },
     {
+      id: 'modes',
+      title: 'Modos',
+      icon: <Settings size={20} />,
+      description: 'Presets Estudante/Autônomo',
+      badge: mode === 'default' ? 'Padrão' : mode,
+      badgeColor: 'var(--app-blue)'
+    },
+    {
       id: 'ai-settings',
       title: 'Assistente IA',
       icon: <Brain size={20} />,
       description: 'Configure sugestões inteligentes',
       badge: 'Ativo',
       badgeColor: 'var(--app-green)'
+    },
+    {
+      id: 'voice-assistants',
+      title: 'Assistentes de Voz',
+      icon: <Microphone size={20} />,
+      description: 'Siri, Google Assistant, Alexa',
+      badge: 'Beta',
+      badgeColor: 'var(--app-purple)'
+    },
+    {
+      id: 'referrals',
+      title: 'Convide Amigos',
+      icon: <Zap size={20} />,
+      description: 'Ganhe 1 mês Premium por convite',
+      badge: 'Convide',
+      badgeColor: 'var(--app-yellow)'
+    },
+    {
+      id: 'reports',
+      title: 'Resumo Semanal',
+      icon: <ExternalLink size={20} />,
+      description: 'Enviar resumo por email/push',
+      badge: 'Manual',
+      badgeColor: 'var(--app-gray)'
     },
     {
       id: 'premium',
@@ -233,6 +329,83 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
     </div>
   );
 
+  const renderGeneral = () => (
+    <div className="space-y-6">
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <h3 className="font-medium text-[var(--app-text)] mb-4">Usuário</h3>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm text-[var(--app-text)] font-medium">{user.name}</div>
+            <div className="text-xs text-[var(--app-text-light)]">ID: {user.id}</div>
+          </div>
+          <Button
+            onClick={() => {
+              const name = prompt('Nome do usuário', user.name) || user.name;
+              const updated = { ...user, name };
+              setUser(updated);
+              storage.set(KEYS.user, updated);
+            }}
+          >Editar</Button>
+        </div>
+      </Card>
+
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <h3 className="font-medium text-[var(--app-text)] mb-2">Importar Google (stub)</h3>
+        <p className="text-sm text-[var(--app-text-light)] mb-4">Simula uma importação de eventos e tarefas.</p>
+        <Button onClick={() => alert('Importação Google simulada!')}>Importar agora</Button>
+      </Card>
+
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <h3 className="font-medium text-[var(--app-text)] mb-2">Idioma</h3>
+        <div className="flex items-center space-x-2">
+          <Button onClick={() => { setLocale('pt'); setLoc('pt'); }} variant={locale==='pt' ? undefined : 'outline'}>PT</Button>
+          <Button onClick={() => { setLocale('en'); setLoc('en'); }} variant={locale==='en' ? undefined : 'outline'}>EN</Button>
+        </div>
+      </Card>
+
+      <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+        <h3 className="font-medium text-[var(--app-text)] mb-2">Assinatura</h3>
+        {subscription ? (
+          <div className="space-y-2 text-sm">
+            <div className="text-[var(--app-text-light)]">Plano: {subscription.plan}</div>
+            <div className="flex items-center justify-between">
+              <span className="text-[var(--app-text-light)]">Início: {subscription.startedAt ? new Date(subscription.startedAt).toLocaleDateString('pt-BR') : '—'}</span>
+              <Button size="sm" variant="outline" onClick={async () => {
+                try {
+                  const res = await api.cancelSubscription({ plan: subscription.plan, startedAt: subscription.startedAt, amountAnnual: 14990 });
+                  alert(`Assinatura cancelada. Reembolso: R$ ${(res.refund/100).toFixed(2)}`);
+                  storage.remove(KEYS.subscription);
+                  setSubscription(null);
+                } catch { alert('Não foi possível cancelar agora.'); }
+              }}>Cancelar</Button>
+            </div>
+            {trialInfo && (
+              <div>
+                {trialInfo.expired ? (
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--app-yellow)]10">
+                    <span className="text-[var(--app-text)]">Seu teste expirou.</span>
+                    <Button size="sm" onClick={() => setShowPremium(true)}>Fazer upgrade</Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--app-blue)]10">
+                    <span className="text-[var(--app-text)]">Teste ativo: {trialInfo.daysLeft} dias restantes</span>
+                    <Button size="sm" onClick={() => setShowPremium(true)}>Upgrade</Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center space-x-2">
+            <Button onClick={() => setShowPremium(true)}>Ver planos</Button>
+            <Button variant="outline" onClick={() => { const sub = { plan: 'trial', startedAt: new Date().toISOString(), durationDays: 7 }; storage.set(KEYS.subscription, sub); setSubscription(sub); }}>Teste 7 dias</Button>
+            <Button variant="outline" onClick={() => { const sub = { plan: 'trial', startedAt: new Date().toISOString(), durationDays: 14 }; storage.set(KEYS.subscription, sub); setSubscription(sub); }}>Teste 14 dias</Button>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+
   const renderPremium = () => (
     <div className="space-y-6">
       <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
@@ -301,23 +474,32 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
                 )}
                 
                 <div className="flex space-x-2 ml-auto">
+                  {integration.id === 'outlook' && (
+                    <Button size="sm" className="text-xs h-7 px-3 bg-[var(--app-blue)]" onClick={async () => {
+                      try { const res = await api.outlookAuthUrl(); window.open(res.url, '_blank'); } catch {}
+                    }}>Conectar Outlook</Button>
+                  )}
+                  {integration.id === 'trello' && (
+                    <Button size="sm" className="text-xs h-7 px-3 bg-[var(--app-blue)]" onClick={async () => {
+                      try { const res = await api.trelloImport({ csvUrl: 'https://example.com/board.csv' }); alert(`Importados: ${res.imported}`); } catch { alert('Falha import Trello'); }
+                    }}>Importar Trello CSV</Button>
+                  )}
+                  {integration.id === 'notion' && (
+                    <Button size="sm" className="text-xs h-7 px-3 bg-[var(--app-blue)]" onClick={async () => { try { const r = await api.notionSync({}); alert(`Páginas importadas: ${r.synced}`); } catch { alert('Falha Notion'); } }}>Sync Notion</Button>
+                  )}
+                  {integration.id === 'slack' && (
+                    <Button size="sm" className="text-xs h-7 px-3 bg-[var(--app-blue)]" onClick={async () => { try { const r = await api.slackStatus({ status: 'focusing' }); alert('Status foco atualizado'); } catch { alert('Falha Slack'); } }}>Status Foco</Button>
+                  )}
+                  {integration.id === 'wearables' && (
+                    <Button size="sm" className="text-xs h-7 px-3 bg-[var(--app-blue)]" onClick={async () => { try { const r = await api.wearablesSummary(); alert(`Passos: ${r.steps}, Foco: ${r.focusMinutes}min`); } catch { alert('Falha Wearables'); } }}>Resumo</Button>
+                  )}
                   {integration.connected ? (
                     <>
-                      <Button size="sm" variant="outline" className="text-xs h-7 px-3">
-                        Configurar
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="ghost" 
-                        className="text-xs h-7 px-3 text-[var(--app-red)]"
-                      >
-                        Desconectar
-                      </Button>
+                      <Button size="sm" variant="outline" className="text-xs h-7 px-3">Configurar</Button>
+                      <Button size="sm" variant="ghost" className="text-xs h-7 px-3 text-[var(--app-red)]">Desconectar</Button>
                     </>
                   ) : (
-                    <Button size="sm" className="text-xs h-7 px-3 bg-[var(--app-blue)]">
-                      Conectar
-                    </Button>
+                    <Button size="sm" className="text-xs h-7 px-3 bg-[var(--app-blue)]">Conectar</Button>
                   )}
                 </div>
               </div>
@@ -347,18 +529,128 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
         {selectedSection === 'integrations' && renderIntegrations()}
         {selectedSection === 'appearance' && (
           <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
-            <h3 className="font-medium text-[var(--app-text)] mb-4">Em breve...</h3>
-            <p className="text-sm text-[var(--app-text-light)]">
-              Configurações de aparência serão implementadas em breve.
-            </p>
+            <h3 className="font-medium text-[var(--app-text)] mb-4">Aparência</h3>
+            <div className="space-y-4">
+              <div>
+                <div className="text-sm text-[var(--app-text-light)] mb-2">Tema</div>
+                <div className="flex items-center space-x-2">
+                  <Button variant="outline">Claro</Button>
+                  <Button variant="outline">Escuro</Button>
+                  <Button variant="outline">Sistema</Button>
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-[var(--app-text-light)] mb-2">Personalização Avançada</div>
+                <div className="p-3 rounded-lg bg-[var(--app-yellow)]10 flex flex-col space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[var(--app-text)]">Temas extras (Sunset, Forest, Neon)</span>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-5 h-5 rounded-full bg-gradient-to-r from-pink-500 to-orange-500 opacity-50" />
+                      <div className="w-5 h-5 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 opacity-50" />
+                      <div className="w-5 h-5 rounded-full bg-gradient-to-r from-cyan-400 to-fuchsia-600 opacity-50" />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[var(--app-text)]">Avatares exclusivos</span>
+                    <div className="flex -space-x-2">
+                      <div className="w-7 h-7 rounded-full bg-[var(--app-blue)] opacity-50 border-2 border-white" />
+                      <div className="w-7 h-7 rounded-full bg-[var(--app-purple)] opacity-50 border-2 border-white" />
+                      <div className="w-7 h-7 rounded-full bg-[var(--app-green)] opacity-50 border-2 border-white" />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[var(--app-text)]">Packs de ícones</span>
+                    <div className="text-xs text-[var(--app-text-light)]">Minimal • Rounded • Outline</div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[var(--app-text)]">Densidade de layout</span>
+                    <div className="flex items-center space-x-1">
+                      <Button size="sm" variant="outline" disabled={!isPremiumActive()} onClick={() => { storage.set(KEYS.appearanceDensity, 'compact'); alert('Densidade salva'); }}>Compacto</Button>
+                      <Button size="sm" variant="outline" disabled={!isPremiumActive()} onClick={() => { storage.set(KEYS.appearanceDensity, 'default'); alert('Densidade salva'); }}>Padrão</Button>
+                      <Button size="sm" variant="outline" disabled={!isPremiumActive()} onClick={() => { storage.set(KEYS.appearanceDensity, 'comfortable'); alert('Densidade salva'); }}>Conforto</Button>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[var(--app-text)]">Fontes</span>
+                    <div className="flex items-center space-x-1">
+                      <Button size="sm" variant="outline" disabled={!isPremiumActive()} onClick={() => { storage.set(KEYS.appearanceFont, 'sans'); alert('Fonte salva'); }}>Sans</Button>
+                      <Button size="sm" variant="outline" disabled={!isPremiumActive()} onClick={() => { storage.set(KEYS.appearanceFont, 'serif'); alert('Fonte salva'); }}>Serif</Button>
+                      <Button size="sm" variant="outline" disabled={!isPremiumActive()} onClick={() => { storage.set(KEYS.appearanceFont, 'mono'); alert('Fonte salva'); }}>Mono</Button>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end">
+                    {!isPremiumActive() ? (
+                      <Button size="sm" onClick={() => setShowPremium(true)}>Fazer upgrade</Button>
+                    ) : (
+                      <Button size="sm" variant="outline" onClick={() => alert('Personalizações premium ativadas!')}>Ativado</Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </Card>
         )}
         {selectedSection === 'privacy' && (
           <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
-            <h3 className="font-medium text-[var(--app-text)] mb-4">Em breve...</h3>
-            <p className="text-sm text-[var(--app-text-light)]">
-              Configurações de privacidade serão implementadas em breve.
-            </p>
+            <h3 className="font-medium text-[var(--app-text)] mb-4">Privacidade</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-[var(--app-text)]">IA local quando possível</span>
+                <Switch checked={localAI} onCheckedChange={(v) => { setLocalAI(!!v); storage.set(KEYS.privacyLocalAI, !!v); }} />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-[var(--app-text)]">Compartilhamento de dados anônimo</span>
+                <Switch checked={dataShare} onCheckedChange={(v) => { setDataShare(!!v); storage.set(KEYS.privacyDataShare, !!v); }} />
+              </div>
+            </div>
+          </Card>
+        )}
+        {selectedSection === 'accessibility' && (
+          <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+            <h3 className="font-medium text-[var(--app-text)] mb-4">Acessibilidade</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-[var(--app-text)]">Alto contraste</span>
+                <Switch checked={highContrast} onCheckedChange={(v) => { setHighContrast(!!v); storage.set(KEYS.accessibilityHighContrast, !!v); }} />
+              </div>
+              <div>
+                <div className="text-sm text-[var(--app-text)] mb-2">Tamanho da fonte ({Math.round(fontScale*100)}%)</div>
+                <input type="range" min="0.85" max="1.4" step="0.05" value={fontScale} onChange={(e) => { const v = parseFloat(e.target.value); setFontScale(v); storage.set(KEYS.accessibilityFontScale, v); }} className="w-full" />
+              </div>
+            </div>
+          </Card>
+        )}
+        {selectedSection === 'modes' && (
+          <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+            <h3 className="font-medium text-[var(--app-text)] mb-4">Modos</h3>
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Button variant={mode==='default'?undefined:'outline'} onClick={() => { setMode('default'); storage.set(KEYS.mode, 'default'); }}>Padrão</Button>
+                <Button variant={mode==='student'?undefined:'outline'} onClick={() => { setMode('student'); storage.set(KEYS.mode, 'student'); }}>Estudante</Button>
+                <Button variant={mode==='freelancer'?undefined:'outline'} onClick={() => { setMode('freelancer'); storage.set(KEYS.mode, 'freelancer'); }}>Autônomo</Button>
+              </div>
+              {modes && (
+                <div className="text-xs text-[var(--app-text-light)]">Sugestão: {mode==='student' ? '3 blocos de foco • relatórios de estudo' : mode==='freelancer' ? '2 blocos de foco • relatórios por cliente' : 'Configurável'}</div>
+              )}
+            </div>
+          </Card>
+        )}
+        {selectedSection === 'referrals' && (
+          <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+            <h3 className="font-medium text-[var(--app-text)] mb-4">Convide Amigos</h3>
+            <div className="flex items-center space-x-2 mb-3">
+              <Button onClick={async () => { try { const r = await api.createReferral(); navigator.clipboard.writeText(r.code); alert('Código copiado: ' + r.code); } catch {} }}>Gerar código</Button>
+              <input id="ref-code" placeholder="Código" className="flex-1 p-3 rounded-xl bg-[var(--app-light-gray)] border-0" />
+              <Button variant="outline" onClick={async () => { const el = document.getElementById('ref-code') as HTMLInputElement|null; const code = el?.value?.trim(); if (!code) return; try { const r = await api.redeemReferral({ code }); alert(`Resgatado! +${r.bonusDays} dias`); } catch { alert('Falha ao resgatar'); } }}>Resgatar</Button>
+            </div>
+            <div className="text-xs text-[var(--app-text-light)]">1 mês Premium por convite ativado.</div>
+          </Card>
+        )}
+        {selectedSection === 'reports' && (
+          <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
+            <h3 className="font-medium text-[var(--app-text)] mb-4">Resumo Semanal</h3>
+            <Button onClick={async () => { try { await api.weeklyDispatch(); alert('Resumo semanal enviado'); } catch { alert('Falha ao enviar'); } }}>Enviar agora</Button>
+            <div className="mt-2 text-xs text-[var(--app-text-light)]">Serão adicionadas preferências de agendamento em breve.</div>
           </Card>
         )}
         {selectedSection === 'ai-settings' && (
@@ -369,14 +661,29 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
             </p>
           </Card>
         )}
-        {selectedSection === 'general' && (
+        {selectedSection === 'voice-assistants' && (
           <Card className="p-6 bg-[var(--app-card)] rounded-2xl border-0 shadow-sm">
-            <h3 className="font-medium text-[var(--app-text)] mb-4">Em breve...</h3>
-            <p className="text-sm text-[var(--app-text-light)]">
-              Configurações gerais serão implementadas em breve.
-            </p>
+            <h3 className="font-medium text-[var(--app-text)] mb-4">Assistentes de Voz</h3>
+            <div className="space-y-3 text-sm">
+              <div className="p-3 rounded-xl bg-[var(--app-light-gray)]">
+                <div className="font-medium mb-1">Siri Shortcuts</div>
+                <div className="text-[var(--app-text-light)] mb-2">Use a URL: /integrations/siri/shortcut?text=Adicionar tarefa Minha tarefa</div>
+                <Button size="sm" onClick={() => alert('Abra Atalhos > Ação URL e cole a URL acima.')}>Ver instruções</Button>
+              </div>
+              <div className="p-3 rounded-xl bg-[var(--app-light-gray)]">
+                <div className="font-medium mb-1">Google Assistant (Dialogflow)</div>
+                <div className="text-[var(--app-text-light)] mb-2">Aponte o webhook para /integrations/google-assistant/webhook</div>
+                <Button size="sm" onClick={() => alert('Configure o webhook no Dialogflow para o endpoint informado.')}>Ver instruções</Button>
+              </div>
+              <div className="p-3 rounded-xl bg-[var(--app-light-gray)]">
+                <div className="font-medium mb-1">Alexa (ASK)</div>
+                <div className="text-[var(--app-text-light)] mb-2">Configure o endpoint de skill para /integrations/alexa/webhook</div>
+                <Button size="sm" onClick={() => alert('No Alexa Developer Console, aponte para o endpoint.')}>Ver instruções</Button>
+              </div>
+            </div>
           </Card>
         )}
+        {selectedSection === 'general' && renderGeneral()}
       </div>
     );
   }

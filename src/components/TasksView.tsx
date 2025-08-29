@@ -7,6 +7,7 @@ import { api } from '../services/api';
 import { SegmentedControl } from './ui/segmented-control';
 import { Tag } from './ui/tag';
 import { EmptyState } from './ui/empty-state';
+import { t } from '../i18n';
 
 const TasksView: React.FC = () => {
   const [selectedBoard, setSelectedBoard] = useState('kanban');
@@ -187,7 +188,7 @@ const TasksView: React.FC = () => {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Tarefas</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">{t('tasks')}</h1>
         <SegmentedControl
           options={[
             { label: 'Lista', value: 'list' },

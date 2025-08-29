@@ -24,3 +24,30 @@ export const storage = {
 
 export default storage;
 
+
+export const KEYS = {
+  theme: 'themePreference',
+  onboarding: 'onboardingPreferences',
+  user: 'userStub',
+  notes: 'notes',
+  tasks: 'tasks',
+  pomoSessions: 'pomodoroSessions',
+  calendarEvents: 'calendarEvents',
+  googleConnected: 'googleConnected',
+  habits: 'habits',
+  bills: 'bills',
+  receivables: 'receivables',
+  transactions: 'transactions',
+  subscription: 'subscription',
+  appearanceExtraTheme: 'appearance.extraTheme',
+  appearanceAvatar: 'appearance.avatar',
+  appearanceIconPack: 'appearance.iconPack',
+  appearanceDensity: 'appearance.density',
+  appearanceFont: 'appearance.font',
+  accessibilityHighContrast: 'accessibility.highContrast',
+  accessibilityFontScale: 'accessibility.fontScale',
+  privacyLocalAI: 'privacy.localAI',
+  privacyDataShare: 'privacy.dataShare',
+  mode: 'mode'
+} as const;
+

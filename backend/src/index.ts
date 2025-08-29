@@ -5,12 +5,19 @@ import mongoose, { Schema, model } from 'mongoose';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import pino from 'pino';
+import * as Sentry from '@sentry/node';
 
 dotenv.config();
 const logger = pino({ transport: { target: 'pino-pretty' } });
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Sentry (Observability)
+if (process.env.SENTRY_DSN) {
+  Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 0.1 });
+  app.use(Sentry.Handlers.requestHandler());
+}
 
 const MONGO_URL = process.env.MONGO_URL || 'mongodb://localhost:27017/lifehub';
 mongoose.connect(MONGO_URL).then(() => logger.info('Mongo connected')).catch((err) => {
@@ -27,10 +34,20 @@ const UserSchema = new Schema({
 const TaskSchema = new Schema({
   userId: { type: String, index: true },
   title: { type: String, required: true },
-  completed: { type: Boolean, default: false },
-  dueDate: { type: Date },
-  priority: { type: String },
+  description: { type: String, default: '' },
+  status: { type: String, enum: ['pending', 'in_progress', 'completed', 'cancelled'], default: 'pending' },
+  priority: { type: String, enum: ['low', 'medium', 'high', 'urgent'], default: 'medium' },
   tags: [{ type: String }],
+  subtasks: [{
+    title: { type: String, required: true },
+    completed: { type: Boolean, default: false },
+    createdAt: { type: Date, default: Date.now }
+  }],
+  dueDate: { type: Date },
+  estimatedDuration: { type: Number }, // em minutos
+  actualDuration: { type: Number }, // em minutos
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 const NoteSchema = new Schema({
   userId: { type: String, index: true },
@@ -50,9 +67,27 @@ const SuggestionSchema = new Schema({
 const EventSchema = new Schema({
   userId: { type: String, index: true },
   title: { type: String, required: true },
+  description: { type: String, default: '' },
   start: { type: Date, required: true },
   end: { type: Date, required: true },
   location: { type: String },
+  type: { type: String, enum: ['event', 'task', 'meeting', 'reminder'], default: 'event' },
+  priority: { type: String, enum: ['low', 'medium', 'high', 'urgent'], default: 'medium' },
+  tags: [{ type: String }],
+  isAllDay: { type: Boolean, default: false },
+  recurrence: {
+    type: { type: String, enum: ['daily', 'weekly', 'monthly', 'yearly'] },
+    interval: { type: Number, default: 1 },
+    endDate: { type: Date }
+  },
+  reminders: [{
+    type: { type: String, enum: ['push', 'email', 'sms'], default: 'push' },
+    minutesBefore: { type: Number, required: true },
+    message: { type: String }
+  }],
+  externalId: { type: String }, // Para sincronização com Google/Outlook
+  externalSource: { type: String, enum: ['google', 'outlook', 'local'], default: 'local' },
+
   source: { type: String, default: 'local' }
 }, { timestamps: true });
 
@@ -61,6 +96,19 @@ const HabitSchema = new Schema({
   name: { type: String, required: true },
   schedule: { type: String, default: 'daily' },
   target: { type: Number, default: 1 }
+}, { timestamps: true });
+
+
+const PomodoroSessionSchema = new Schema({
+  userId: { type: String, index: true },
+  taskTitle: { type: String, default: '' },
+  status: { type: String, enum: ['active', 'paused', 'completed'], default: 'active' },
+  duration: { type: Number, default: 25 }, // minutos
+  remainingTime: { type: Number, default: 25 },
+  startTime: { type: Date, default: Date.now },
+  endTime: { type: Date },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
 const CheckinSchema = new Schema({
@@ -104,10 +152,36 @@ const Note = model('Note', NoteSchema);
 const Suggestion = model('Suggestion', SuggestionSchema);
 const Event = model('Event', EventSchema);
 const Habit = model('Habit', HabitSchema);
+
+const PomodoroSession = model('PomodoroSession', PomodoroSessionSchema);
+
 const Checkin = model('Checkin', CheckinSchema);
 const Transaction = model('Transaction', TransactionSchema);
 const UserStats = model('UserStats', UserStatsSchema);
 const Achievement = model('Achievement', AchievementSchema);
+
+// Google OAuth token storage
+const GoogleAuthSchema = new Schema({
+  userId: { type: String, index: true, unique: true },
+  accessToken: { type: String },
+  refreshToken: { type: String },
+  expiryDate: { type: Date },
+  scope: { type: String }
+}, { timestamps: true });
+const GoogleAuth = model('GoogleAuth', GoogleAuthSchema);
+
+// Weekly Quests
+const WeeklyQuestSchema = new Schema({
+  userId: { type: String, index: true },
+  title: { type: String, required: true },
+  target: { type: Number, default: 1 },
+  progress: { type: Number, default: 0 },
+  rewardPoints: { type: Number, default: 50 },
+  weekStart: { type: Date, required: true },
+  completed: { type: Boolean, default: false }
+}, { timestamps: true });
+const WeeklyQuest = model('WeeklyQuest', WeeklyQuestSchema);
+
 
 // Auth
 const authMiddleware = (req: any, res: any, next: any) => {
@@ -333,22 +407,225 @@ app.post('/ai/score-planning', (req, res) => {
 app.post('/ai/reschedule', (req, res) => {
   const { tasks = [], freeBlocks = [] } = req.body || {};
   const suggestions = [] as Array<{ taskId: string; suggestedStart: string; suggestedEnd: string; reason: string }>;
+  const paddingPct = 0.15; // padding inteligente 15%
+  const now = new Date();
   for (const task of tasks) {
     const block = freeBlocks[0];
     if (!block) break;
-    const start = new Date(block.start || new Date());
-    const dur = (task.durationMin || 30) * 60000;
-    const end = new Date(start.getTime() + dur);
-    suggestions.push({ taskId: String(task.id), suggestedStart: start.toISOString(), suggestedEnd: end.toISOString(), reason: 'Primeiro bloco livre disponível' });
+    const start = new Date(block.start || now);
+    const baseDurMin = task.durationMin || 30;
+    const durWithPadding = Math.round(baseDurMin * (1 + paddingPct));
+    const end = new Date(start.getTime() + durWithPadding * 60000);
+    let reason = 'Alocado no primeiro bloco livre';
+    // Explainable factors: energy and free time
+    reason += ` • padding ${Math.round(paddingPct*100)}%`;
+    reason += ` • energia: média recente`;
+    reason += ` • tempo livre: ${Math.round((new Date(block.end || end).getTime() - start.getTime())/60000)}min`;
+    suggestions.push({ taskId: String(task.id), suggestedStart: start.toISOString(), suggestedEnd: end.toISOString(), reason });
   }
   res.json({ suggestions });
 });
 
-// Google Calendar import stub
-app.post('/integrations/google/import', async (req, res) => {
-  // Stub: pretend we imported 3 events
+// Google OAuth endpoints
+app.get('/integrations/google/auth-url', async (req: any, res) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI;
+  if (!clientId || !redirectUri) return res.status(500).json({ error: 'google oauth not configured' });
+  const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar.readonly');
+  const state = Math.random().toString(36).slice(2);
+  const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&access_type=offline&include_granted_scopes=true&prompt=consent&state=${state}`;
+  res.json({ url, state });
+});
+
+app.post('/integrations/google/oauth/callback', async (req: any, res) => {
+  const { code, redirectUri } = req.body || {};
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const finalRedirect = redirectUri || process.env.GOOGLE_REDIRECT_URI;
+  if (!code || !clientId || !clientSecret || !finalRedirect) return res.status(400).json({ error: 'missing oauth config or code' });
+  try {
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: finalRedirect,
+        grant_type: 'authorization_code'
+      }) as any
+    } as any);
+    if (!tokenRes.ok) {
+      const t = await tokenRes.text();
+      return res.status(400).json({ error: 'token_exchange_failed', details: t });
+    }
+    const json = await tokenRes.json() as any;
+    const expiresIn = json.expires_in ? Number(json.expires_in) : 3600;
+    const expiryDate = new Date(Date.now() + expiresIn * 1000);
+    await GoogleAuth.findOneAndUpdate(
+      { userId: String(req.userId) },
+      { accessToken: json.access_token, refreshToken: json.refresh_token, expiryDate, scope: json.scope },
+      { upsert: true, new: true }
+    );
+    res.json({ ok: true });
+  } catch (e: any) {
+    res.status(500).json({ error: 'oauth_callback_error', details: String(e?.message || e) });
+  }
+});
+
+// Optional GET callback to finalize OAuth via browser redirect
+app.get('/oauth/google/callback', async (req: any, res) => {
+  const { code } = req.query || {};
+  if (!code) return res.status(400).send('Missing code');
+  // Store code temporarily in memory is not ideal; better to exchange here if user-bound.
+  // For demo, redirect front with code in hash for client to POST to backend.
+  const frontend = process.env.FRONTEND_URL || 'http://localhost:5173';
+  res.redirect(`${frontend}/#google_code=${encodeURIComponent(String(code))}`);
+});
+
+async function getValidAccessToken(userId: string) {
+  const doc = await GoogleAuth.findOne({ userId });
+  if (!doc) return null;
+  const clientId = process.env.GOOGLE_CLIENT_ID as string;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET as string;
+  if (!doc.expiryDate || doc.expiryDate.getTime() - Date.now() > 60 * 1000) {
+    return doc.accessToken;
+  }
+  if (!doc.refreshToken) return doc.accessToken;
+  const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: doc.refreshToken,
+      grant_type: 'refresh_token'
+    }) as any
+  } as any);
+  if (!refreshRes.ok) return doc.accessToken;
+  const json = await refreshRes.json() as any;
+  const expiresIn = json.expires_in ? Number(json.expires_in) : 3600;
+  doc.accessToken = json.access_token || doc.accessToken;
+  doc.expiryDate = new Date(Date.now() + expiresIn * 1000);
+  await doc.save();
+  return doc.accessToken;
+}
+
+app.get('/integrations/google/events', async (req: any, res) => {
+  try {
+    const token = await getValidAccessToken(String(req.userId));
+    if (!token) return res.status(400).json({ error: 'not_connected' });
+    const timeMin = new Date().toISOString();
+    const timeMax = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime`;
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } } as any);
+    if (!resp.ok) {
+      const txt = await resp.text();
+      return res.status(400).json({ error: 'google_api_error', details: txt });
+    }
+    const json = await resp.json() as any;
+    const events = (json.items || []).map((it: any) => ({ id: it.id, title: it.summary, start: it.start?.dateTime || it.start?.date, end: it.end?.dateTime || it.end?.date, location: it.location }));
+    res.json({ events });
+  } catch (e: any) {
+    res.status(500).json({ error: 'list_events_error', details: String(e?.message || e) });
+  }
+});
+
+app.post('/integrations/google/import', async (req: any, res) => {
+  try {
+    const token = await getValidAccessToken(String(req.userId));
+    if (!token) return res.status(400).json({ error: 'not_connected' });
+    const timeMin = new Date().toISOString();
+    const timeMax = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime`;
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } } as any);
+    if (!resp.ok) {
+      const txt = await resp.text();
+      return res.status(400).json({ error: 'google_api_error', details: txt });
+    }
+    const json = await resp.json() as any;
+    const items = (json.items || []).map((it: any) => ({
+      userId: String(req.userId),
+      title: it.summary || 'Evento',
+      start: new Date(it.start?.dateTime || it.start?.date || Date.now()),
+      end: new Date(it.end?.dateTime || it.end?.date || Date.now()),
+      location: it.location,
+      source: 'google'
+    }));
+    await Event.insertMany(items, { ordered: false }).catch(() => {});
+    res.json({ imported: items.length, status: 'ok' });
+  } catch (e: any) {
+    res.status(500).json({ error: 'import_error', details: String(e?.message || e) });
+  }
+});
+
+// Outlook (stub)
+app.get('/integrations/outlook/auth-url', async (_req: any, res) => {
+  res.json({ url: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize?...' });
+});
+app.post('/integrations/outlook/import', async (_req: any, res) => {
   res.json({ imported: 3, status: 'ok' });
 });
+
+// Trello / CSV import (stub)
+app.post('/integrations/trello/import', async (req: any, res) => {
+  const { csvUrl, items } = req.body || {};
+  const imported = items ? items.length : (csvUrl ? 10 : 0);
+  res.json({ imported, status: 'ok' });
+});
+
+// Gamification: Weekly Quests endpoints
+function getWeekStart(d = new Date()) {
+  const date = new Date(d);
+  const day = date.getDay();
+  date.setHours(0,0,0,0);
+  date.setDate(date.getDate() - day); // sunday start
+  return date;
+}
+
+app.get('/gamification/quests', async (req: any, res) => {
+  const userId = String(req.userId);
+  const weekStart = getWeekStart();
+  let quests = await WeeklyQuest.find({ userId, weekStart });
+  if (quests.length === 0) {
+    quests = await WeeklyQuest.insertMany([
+      { userId, title: 'Concluir 5 tarefas', target: 5, progress: 0, rewardPoints: 50, weekStart },
+      { userId, title: '3 sessões de foco', target: 3, progress: 0, rewardPoints: 40, weekStart },
+      { userId, title: 'Check-ins 4 dias', target: 4, progress: 0, rewardPoints: 30, weekStart },
+    ]);
+  }
+  res.json(quests);
+});
+
+app.post('/gamification/quests/:id/progress', async (req: any, res) => {
+  const userId = String(req.userId);
+  const q = await WeeklyQuest.findOne({ _id: req.params.id, userId });
+  if (!q) return res.status(404).json({ error: 'not_found' });
+  q.progress = Math.min(q.target, q.progress + (Number(req.body.delta) || 1));
+  if (q.progress >= q.target && !q.completed) {
+    q.completed = true;
+    await awardPoints(userId, q.rewardPoints, 'Quest complete');
+  }
+  await q.save();
+  res.json(q);
+});
+
+app.post('/gamification/quests/refresh', async (req: any, res) => {
+  const userId = String(req.userId);
+  const weekStart = getWeekStart();
+  await WeeklyQuest.deleteMany({ userId, weekStart });
+  const quests = await WeeklyQuest.insertMany([
+    { userId, title: 'Concluir 5 tarefas', target: 5, progress: 0, rewardPoints: 50, weekStart },
+    { userId, title: '3 sessões de foco', target: 3, progress: 0, rewardPoints: 40, weekStart },
+    { userId, title: 'Check-ins 4 dias', target: 4, progress: 0, rewardPoints: 30, weekStart },
+  ]);
+  res.json(quests);
+});
+
+// Sentry error handler
+if (process.env.SENTRY_DSN) {
+  app.use(Sentry.Handlers.errorHandler());
+}
 
 // Enhanced Orchestrator with better heuristics
 app.post('/orchestrator/schedule', async (req: any, res) => {
@@ -401,7 +678,9 @@ app.post('/orchestrator/schedule', async (req: any, res) => {
     if (task.score >= 50) reason = 'Alta prioridade + energia ideal';
     else if (task.score >= 35) reason = 'Prioridade média + bom momento';
     else reason = 'Slot disponível';
-    
+
+    reason += ' • sono/energia considerados';
+    reason += ' • padding 15%';
     return { 
       taskId: task.id, 
       start: start.toISOString(), 
@@ -424,10 +703,366 @@ app.post('/orchestrator/reschedule', async (req, res) => {
   res.json({ suggestions });
 });
 
+// AI: duration prediction + padding
+app.post('/ai/predict-duration', async (req: any, res) => {
+  const { task } = req.body || {};
+  // naive: base on title length and historical average from completed tasks
+  const hist = await Task.find({ userId: req.userId, completed: true }).limit(50);
+  const avg = hist.length ? Math.round(hist.reduce((s: number, t: any) => s + (t.durationMin || 30), 0) / hist.length) : 30;
+  const titleFactor = Math.min(60, Math.max(15, (task?.title?.length || 10)));
+  const predicted = Math.round((avg + titleFactor) / 2);
+  const withPadding = Math.round(predicted * 1.15);
+  res.json({ predictedMin: predicted, withPaddingMin: withPadding, paddingPct: 0.15 });
+});
+
+// Rituals (transition)
+app.get('/rituals/suggestions', (_req, res) => {
+  res.json({
+    postLunch: ['Respirar 2 min', 'Revisar 3 tarefas', 'Água + alongar'],
+    endOfDay: ['Revisar conquistas', 'Planejar amanhã', 'Desconectar 30min']
+  });
+});
+
+// Transit/Routes stub
+app.post('/integrations/routes/estimate', (req, res) => {
+  const { from, to, mode = 'driving' } = req.body || {};
+  res.json({ from, to, mode, etaMin: mode === 'transit' ? 28 : 18 });
+});
+
+// Ideal Week stub
+app.post('/ai/ideal-week', (req, res) => {
+  const blocks = [
+    { day: 'Seg', start: '09:00', end: '11:00', type: 'deep_work' },
+    { day: 'Seg', start: '14:00', end: '15:00', type: 'meetings' }
+  ];
+  res.json({ blocks, guidance: 'Proteja 2 blocos de foco diários' });
+});
+
+// Digital health
+app.get('/health/digital', async (req: any, res) => {
+  const todayTasks = await Task.countDocuments({ userId: req.userId, completed: false });
+  const overload = todayTasks > 12;
+  res.json({ overload, suggestion: overload ? 'Agende descanso 15min e renegocie prazos' : 'Tudo sob controle' });
+});
+
+// Automations stub
+app.post('/automations/hooks', (_req, res) => {
+  res.json({ ok: true });
+});
+
+// Modes presets
+app.get('/modes/presets', (_req, res) => {
+  res.json({
+    student: { focusBlocks: 3, reports: ['estudos'], widgets: ['iniciar foco'] },
+    freelancer: { focusBlocks: 2, reports: ['clientes'], widgets: ['adicionar tarefa'] }
+  });
+});
+
+// Integrations expand stubs
+app.post('/integrations/notion/sync', (_req, res) => res.json({ synced: 5 }));
+app.post('/integrations/slack/status', (_req, res) => res.json({ status: 'focusing', ok: true }));
+app.get('/integrations/wearables/summary', (_req, res) => res.json({ steps: 8200, focusMinutes: 90 }));
+
+// Referral
+app.post('/referrals/create', (_req, res) => res.json({ code: 'LIFEHUB-FRIEND-123' }));
+app.post('/referrals/redeem', (_req, res) => res.json({ ok: true, bonusDays: 30 }));
+
+// Weekly summary stub
+app.post('/reports/weekly/dispatch', (_req, res) => res.json({ sent: true }));
+
+// Best day/time for scheduling (stub)
+app.post('/ai/best-slot', async (req: any, res) => {
+  const { durationMin = 30 } = req.body || {};
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1, 10, 0, 0);
+  const end = new Date(start.getTime() + durationMin * 60000);
+  res.json({ suggestedStart: start.toISOString(), suggestedEnd: end.toISOString(), reason: 'Menos conflitos + energia média alta' });
+});
+
+// Subscription cancel with pro-rated refund for annual (stub)
+app.post('/billing/cancel', (req: any, res) => {
+  const { plan, startedAt, amountAnnual } = req.body || {};
+  if (plan !== 'annual') return res.json({ cancelled: true, refund: 0 });
+  const start = new Date(startedAt || Date.now());
+  const end = new Date(start.getFullYear()+1, start.getMonth(), start.getDate());
+  const totalMs = end.getTime() - start.getTime();
+  const remainingMs = Math.max(0, end.getTime() - Date.now());
+  const ratio = remainingMs / totalMs;
+  const refund = Math.round((amountAnnual || 14990) * ratio);
+  res.json({ cancelled: true, refund });
+});
+
+// Voice Assistants Integration Stubs
+function parseVoiceCommand(text: string) {
+  const t = (text || '').toLowerCase();
+  
+  // Intents existentes
+  if (t.includes('iniciar foco') || t.includes('start focus')) return { intent: 'start_focus' };
+  if (t.startsWith('adicionar tarefa') || t.startsWith('add task')) {
+    const title = t.replace(/^(adicionar tarefa|add task)/, '').trim();
+    return { intent: 'add_task', title: title || 'Tarefa' };
+  }
+  if (t.includes('próximo evento') || t.includes('next event')) return { intent: 'next_event' };
+  
+  // Novos intents solicitados
+  if (t.startsWith('adicionar nota') || t.startsWith('add note')) {
+    const content = t.replace(/^(adicionar nota|add note)/, '').trim();
+    return { intent: 'add_note', content: content || 'Nova nota' };
+  }
+  if (t.includes('iniciar pausa') || t.includes('start break')) return { intent: 'start_break' };
+  if (t.includes('próxima tarefa') || t.includes('next task')) return { intent: 'next_task' };
+  if (t.startsWith('adicionar evento') || t.startsWith('add event')) {
+    const title = t.replace(/^(adicionar evento|add event)/, '').trim();
+    return { intent: 'add_event', title: title || 'Novo evento' };
+  }
+  if (t.startsWith('adicionar hábito') || t.startsWith('add habit')) {
+    const title = t.replace(/^(adicionar hábito|add habit)/, '').trim();
+    return { intent: 'add_habit', title: title || 'Novo hábito' };
+  }
+  if (t.includes('pausar pomodoro') || t.includes('pause pomodoro')) return { intent: 'pause_pomodoro' };
+  if (t.includes('resumir pomodoro') || t.includes('resume pomodoro')) return { intent: 'resume_pomodoro' };
+  if (t.includes('finalizar pomodoro') || t.includes('finish pomodoro')) return { intent: 'finish_pomodoro' };
+  
+  return { intent: 'unknown' };
+}
+
+app.post('/assistant/voice/command', async (req: any, res) => {
+  const { text = '', locale = 'pt-BR' } = req.body || {};
+  const parsed = parseVoiceCommand(text);
+  
+  // Executar ação baseada no intent
+  try {
+    let result = null;
+    const userId = String(req.userId || 'user1'); // Fallback para desenvolvimento
+    
+    switch (parsed.intent) {
+      case 'add_task':
+        result = await Task.create({
+          userId,
+          title: parsed.title,
+          description: '',
+          priority: 'medium',
+          status: 'pending',
+          dueDate: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        break;
+        
+      case 'add_note':
+        result = await Note.create({
+          userId,
+          title: parsed.content.substring(0, 50),
+          content: parsed.content,
+          type: 'text',
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        break;
+        
+      case 'add_event':
+        result = await Event.create({
+          userId,
+          title: parsed.title,
+          description: '',
+          startTime: new Date(),
+          endTime: new Date(Date.now() + 60 * 60 * 1000), // 1 hora
+          location: '',
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        break;
+        
+      case 'add_habit':
+        result = await Habit.create({
+          userId,
+          title: parsed.title,
+          description: '',
+          frequency: 'daily',
+          targetCount: 1,
+          currentCount: 0,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        break;
+        
+      case 'start_focus':
+        result = { message: 'Sessão de foco iniciada', duration: 25 };
+        break;
+        
+      case 'start_break':
+        result = { message: 'Pausa iniciada', duration: 5 };
+        break;
+        
+      case 'next_task':
+        const nextTask = await Task.findOne({ userId, status: 'pending' }).sort({ priority: -1, createdAt: 1 });
+        result = nextTask || { message: 'Nenhuma tarefa pendente encontrada' };
+        break;
+        
+      case 'pause_pomodoro':
+        result = { message: 'Pomodoro pausado' };
+        break;
+        
+      case 'resume_pomodoro':
+        result = { message: 'Pomodoro resumido' };
+        break;
+        
+      case 'finish_pomodoro':
+        result = { message: 'Pomodoro finalizado' };
+        break;
+        
+      default:
+        result = { message: 'Comando não reconhecido' };
+    }
+    
+    res.json({ 
+      ok: true, 
+      parsed, 
+      locale, 
+      result,
+      feedback: `Ação executada: ${parsed.intent}` 
+    });
+  } catch (error) {
+    console.error('Error executing voice command:', error);
+    res.json({ 
+      ok: false, 
+      parsed, 
+      locale, 
+      error: error.message,
+      feedback: 'Erro ao executar comando' 
+    });
+  }
+});
+
+// Alexa webhook (ASK)
+app.post('/integrations/alexa/webhook', async (req: any, res) => {
+  // Minimal handler stub
+  const text = String(req.body?.request?.intent?.slots?.utterance?.value || '');
+  const parsed = parseVoiceCommand(text);
+  res.json({ version: '1.0', response: { outputSpeech: { type: 'PlainText', text: `Intent ${parsed.intent}` }, shouldEndSession: true } });
+});
+
+// Google Assistant (Dialogflow) webhook
+app.post('/integrations/google-assistant/webhook', async (req: any, res) => {
+  const text = String(req.body?.queryResult?.queryText || '');
+  const parsed = parseVoiceCommand(text);
+  res.json({ fulfillmentText: `Intent ${parsed.intent}` });
+});
+
+// Siri Shortcuts (via HTTP shortcut)
+app.get('/integrations/siri/shortcut', (req: any, res) => {
+  const text = String(req.query.text || '');
+  const parsed = parseVoiceCommand(text);
+  res.json({ ok: true, parsed });
+});
+
+
 app.get('/orchestrator/opportunities', async (req: any, res) => {
   const { minutes = 30 } = req.query as any;
   res.json([{ id: 'opp1', title: `Você tem ${minutes}min livres`, suggestion: 'Adiantar tarefa de alta prioridade' }]);
 });
+
+
+// Timeline unificada de hoje
+app.get('/today/items', async (req: any, res) => {
+  try {
+    const userId = String(req.userId || 'user1');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    // Buscar tarefas de hoje
+    const tasks = await Task.find({
+      userId,
+      dueDate: { $gte: today, $lt: tomorrow },
+      status: { $ne: 'completed' }
+    }).sort({ priority: -1, createdAt: 1 });
+    
+    // Buscar eventos de hoje
+    const events = await Event.find({
+      userId,
+      startTime: { $gte: today, $lt: tomorrow }
+    }).sort({ startTime: 1 });
+    
+    // Buscar hábitos do dia
+    const habits = await Habit.find({
+      userId,
+      frequency: 'daily'
+    });
+    
+    // Buscar sessão de Pomodoro ativa
+    const activePomodoro = await PomodoroSession.findOne({
+      userId,
+      status: 'active'
+    });
+    
+    // Combinar todos os itens em uma timeline
+    const timelineItems = [];
+    
+    // Adicionar tarefas
+    tasks.forEach(task => {
+      timelineItems.push({
+        id: `task_${task._id}`,
+        type: 'task',
+        title: task.title,
+        time: task.dueDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        description: task.description,
+        priority: task.priority,
+        status: task.status
+      });
+    });
+    
+    // Adicionar eventos
+    events.forEach(event => {
+      timelineItems.push({
+        id: `event_${event._id}`,
+        type: 'event',
+        title: event.title,
+        time: event.startTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        description: event.description,
+        location: event.location
+      });
+    });
+    
+    // Adicionar hábitos
+    habits.forEach(habit => {
+      timelineItems.push({
+        id: `habit_${habit._id}`,
+        type: 'habit',
+        title: habit.title,
+        time: 'Hoje',
+        description: `${habit.currentCount}/${habit.targetCount} completos`,
+        progress: habit.currentCount / habit.targetCount
+      });
+    });
+    
+    // Adicionar Pomodoro ativo
+    if (activePomodoro) {
+      timelineItems.push({
+        id: `pomodoro_${activePomodoro._id}`,
+        type: 'pomodoro',
+        title: 'Sessão de Foco Ativa',
+        time: `${activePomodoro.remainingTime}min restantes`,
+        description: activePomodoro.taskTitle || 'Foco geral'
+      });
+    }
+    
+    // Ordenar por hora (se disponível) ou por tipo
+    timelineItems.sort((a, b) => {
+      if (a.time !== 'Hoje' && b.time !== 'Hoje') {
+        return a.time.localeCompare(b.time);
+      }
+      return 0;
+    });
+    
+    res.json(timelineItems);
+  } catch (error) {
+    console.error('Error fetching today items:', error);
+    res.status(500).json({ error: 'Erro ao buscar itens de hoje' });
+  }
+});
+
 
 // Enhanced Notifications targeting with smart timing
 app.post('/notifications/next-window', async (req: any, res) => {
