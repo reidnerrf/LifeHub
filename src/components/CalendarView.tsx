@@ -1,317 +1,441 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Clock, MapPin, Users } from 'lucide-react';
-import { Card } from './ui/card';
-import { Badge } from './ui/badge';
-import { storage, KEYS } from '../services/storage';
-import { api } from '../services/api';
+import React, { useState, useMemo } from 'react';
+import { 
+  View, 
+  Text, 
+  TouchableOpacity, 
+  ScrollView, 
+  StyleSheet, 
+  Dimensions,
+  Alert
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../theme/ThemeProvider';
+import { useTasks, Task } from '../store/tasks';
+import TaskItem from './TaskItem';
 
-const CalendarView: React.FC = () => {
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('week');
-  const [events, setEvents] = useState<Array<{ id: string|number; title: string; start: string; end: string; location?: string; attendees?: number; color?: string }>>(() => storage.get(KEYS.calendarEvents) || []);
-  const [googleConnected, setGoogleConnected] = useState<boolean>(() => !!storage.get(KEYS.googleConnected));
+const { width } = Dimensions.get('window');
 
-  useEffect(() => {
-    storage.set(KEYS.calendarEvents, events);
-  }, [events]);
+interface CalendarViewProps {
+  onTaskPress?: (task: Task) => void;
+}
 
-  const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-  const today = new Date();
-  const monthGrid = useMemo(() => {
-    const first = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
-    const start = new Date(first);
-    start.setDate(first.getDate() - first.getDay());
-    return Array.from({ length: 42 }, (_, i) => {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
-      return d;
+export default function CalendarView({ onTaskPress }: CalendarViewProps) {
+  const t = useTheme();
+  const { tasks, updateTask } = useTasks();
+  const [currentWeek, setCurrentWeek] = useState(new Date());
+
+  // Gerar dias da semana atual
+  const weekDays = useMemo(() => {
+    const days = [];
+    const startOfWeek = new Date(currentWeek);
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+    
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(startOfWeek);
+      day.setDate(day.getDate() + i);
+      days.push(day);
+    }
+    
+    return days;
+  }, [currentWeek]);
+
+  // Navegar para semana anterior/próxima
+  const goToPreviousWeek = () => {
+    const newWeek = new Date(currentWeek);
+    newWeek.setDate(newWeek.getDate() - 7);
+    setCurrentWeek(newWeek);
+  };
+
+  const goToNextWeek = () => {
+    const newWeek = new Date(currentWeek);
+    newWeek.setDate(newWeek.getDate() + 7);
+    setCurrentWeek(newWeek);
+  };
+
+  const goToToday = () => {
+    setCurrentWeek(new Date());
+  };
+
+  // Obter tarefas para um dia específico
+  const getTasksForDay = (date: Date) => {
+    return tasks.filter(task => {
+      if (!task.dueDate) return false;
+      
+      const taskDate = new Date(task.dueDate);
+      return (
+        taskDate.getDate() === date.getDate() &&
+        taskDate.getMonth() === date.getMonth() &&
+        taskDate.getFullYear() === date.getFullYear()
+      );
     });
-  }, [selectedDate]);
-
-  const dayEvents = (date: Date) => {
-    const yyyy = date.getFullYear();
-    const mm = date.getMonth();
-    const dd = date.getDate();
-    return events.filter(ev => {
-      const s = new Date(ev.start);
-      return s.getFullYear() === yyyy && s.getMonth() === mm && s.getDate() === dd;
-    });
   };
 
-  const formatTimeRange = (start: string, end: string) => {
-    const s = new Date(start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    const e = new Date(end).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    return `${s} - ${e}`;
+  // Verificar se é hoje
+  const isToday = (date: Date) => {
+    const today = new Date();
+    return (
+      date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear()
+    );
   };
 
-  const connectGoogle = async () => {
-    try {
-      const { url } = await api.googleAuthUrl();
-      const w = window.open(url, '_blank', 'width=500,height=700');
-      alert('Conclua o OAuth na janela aberta e clique OK para continuar.');
-      // Backend expects callback POST; aqui assumimos que o user colou code no redirect do backend.
-      // Como fallback, tentamos listar eventos; se sucesso, marcamos conectado.
-      try {
-        const ev = await api.googleEvents();
-        if (ev?.events) {
-          setEvents((prev) => [...prev, ...ev.events]);
-          storage.set(KEYS.googleConnected, true);
-          setGoogleConnected(true);
-        }
-      } catch {}
-    } catch {}
+  // Verificar se é fim de semana
+  const isWeekend = (date: Date) => {
+    const day = date.getDay();
+    return day === 0 || day === 6;
   };
 
-  useEffect(() => {
-    // Alertas "sair em 20min" (simulado)
-    const interval = setInterval(() => {
-      const now = Date.now();
-      const next = events.find(ev => new Date(ev.start).getTime() - now <= 20*60*1000 && new Date(ev.start).getTime() - now > 0);
-      if (next && Notification && Notification.permission === 'granted') {
-        new Notification('Lembrete', { body: `Saia em 20min para: ${next.title}` });
-      }
-    }, 60*1000);
-    return () => clearInterval(interval);
-  }, [events]);
-  
+  // Formatar data
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('pt-BR', { 
-      day: '2-digit', 
-      month: 'long',
-      year: 'numeric' 
+      weekday: 'short', 
+      day: 'numeric',
+      month: 'short'
     });
   };
 
-  const generateWeekDays = () => {
-    const startOfWeek = new Date(selectedDate);
-    const day = startOfWeek.getDay();
-    startOfWeek.setDate(startOfWeek.getDate() - day);
-    
-    return Array.from({ length: 7 }, (_, i) => {
-      const date = new Date(startOfWeek);
-      date.setDate(startOfWeek.getDate() + i);
-      return date;
-    });
+  // Obter cor da prioridade
+  const getPriorityColor = (priority: Task['priority']) => {
+    switch (priority) {
+      case 'urgent': return '#FF3B30';
+      case 'high': return '#FF9500';
+      case 'medium': return '#007AFF';
+      case 'low': return '#34C759';
+      default: return t.textLight;
+    }
   };
 
-  const weekDates = generateWeekDays();
+  // Reagendar tarefa
+  const rescheduleTask = (task: Task, newDate: Date) => {
+    updateTask(task.id, { dueDate: newDate });
+  };
+
+  // Obter estatísticas da semana
+  const getWeekStats = () => {
+    let totalTasks = 0;
+    let completedTasks = 0;
+    let urgentTasks = 0;
+
+    weekDays.forEach(day => {
+      const dayTasks = getTasksForDay(day);
+      totalTasks += dayTasks.length;
+      completedTasks += dayTasks.filter(t => t.status === 'completed').length;
+      urgentTasks += dayTasks.filter(t => t.priority === 'urgent').length;
+    });
+
+    return { totalTasks, completedTasks, urgentTasks };
+  };
+
+  const weekStats = getWeekStats();
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Agenda</h1>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => setViewMode('day')}
-            className={`px-3 py-1 rounded-lg text-sm ${
-              viewMode === 'day' 
-                ? 'bg-[var(--app-blue)] text-white' 
-                : 'bg-gray-100 text-[var(--app-gray)]'
-            }`}
-          >
-            Dia
-          </button>
-          <button
-            onClick={() => setViewMode('week')}
-            className={`px-3 py-1 rounded-lg text-sm ${
-              viewMode === 'week' 
-                ? 'bg-[var(--app-blue)] text-white' 
-                : 'bg-gray-100 text-[var(--app-gray)]'
-            }`}
-          >
-            Semana
-          </button>
-          <button
-            onClick={() => setViewMode('month')}
-            className={`px-3 py-1 rounded-lg text-sm ${
-              viewMode === 'month' 
-                ? 'bg-[var(--app-blue)] text-white' 
-                : 'bg-gray-100 text-[var(--app-gray)]'
-            }`}
-          >
-            Mês
-          </button>
-          <button
-            onClick={connectGoogle}
-            className={`px-3 py-1 rounded-lg text-sm ${googleConnected ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-[var(--app-gray)]'}`}
-          >
-            {googleConnected ? 'Google conectado' : 'Conectar Google'}
-          </button>
-          <button
-            onClick={async () => {
-              try {
-                const res = await api.estimateRoute({ from: 'Casa', to: 'Próximo evento', mode: 'transit' });
-                alert(`Rota: ${res.mode}, ETA ${res.etaMin}min`);
-              } catch {}
-            }}
-            className={`px-3 py-1 rounded-lg text-sm bg-gray-100 text-[var(--app-gray)]`}
-          >
-            Rotas
-          </button>
-        </div>
-      </div>
+    <View style={styles.container}>
+      {/* Header do calendário */}
+      <View style={[styles.header, { backgroundColor: t.card }]}>
+        <View style={styles.navigation}>
+          <TouchableOpacity onPress={goToPreviousWeek} style={styles.navButton}>
+            <Ionicons name="chevron-back" size={24} color={t.text} />
+          </TouchableOpacity>
+          
+          <TouchableOpacity onPress={goToToday} style={styles.todayButton}>
+            <Text style={[styles.todayText, { color: t.primary }]}>Hoje</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity onPress={goToNextWeek} style={styles.navButton}>
+            <Ionicons name="chevron-forward" size={24} color={t.text} />
+          </TouchableOpacity>
+        </View>
 
-      {/* Date Navigation */}
-      <div className="flex items-center justify-between mb-6">
-        <button 
-          onClick={() => {
-            const newDate = new Date(selectedDate);
-            newDate.setDate(newDate.getDate() - 7);
-            setSelectedDate(newDate);
-          }}
-          className="p-2 text-[var(--app-gray)] hover:text-gray-900"
-        >
-          <ChevronLeft size={20} />
-        </button>
-        
-        <h2 className="text-lg font-medium text-gray-900">
-          {formatDate(selectedDate)}
-        </h2>
-        
-        <button 
-          onClick={() => {
-            const newDate = new Date(selectedDate);
-            newDate.setDate(newDate.getDate() + 7);
-            setSelectedDate(newDate);
-          }}
-          className="p-2 text-[var(--app-gray)] hover:text-gray-900"
-        >
-          <ChevronRight size={20} />
-        </button>
-      </div>
+        <Text style={[styles.weekTitle, { color: t.text }]}>
+          {weekDays[0].toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+        </Text>
 
-      {/* Month View */}
-      {viewMode === 'month' && (
-        <div className="grid grid-cols-7 gap-2">
-          {monthGrid.map((date, idx) => {
-            const isCurrentMonth = date.getMonth() === selectedDate.getMonth();
-            const isToday = date.toDateString() === today.toDateString();
-            const evts = dayEvents(date);
-            return (
-              <div key={idx} className={`p-2 rounded-xl border ${isCurrentMonth ? 'bg-white' : 'bg-gray-50'} ${isToday ? 'border-[var(--app-blue)]' : 'border-gray-100'}`}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className={`text-xs ${isCurrentMonth ? 'text-gray-700' : 'text-gray-400'}`}>{date.getDate()}</span>
-                </div>
-                <div className="space-y-1">
-                  {evts.slice(0, 3).map(ev => (
-                    <div key={String(ev.id)} className="text-[10px] px-2 py-1 rounded bg-[var(--app-blue)]15 text-[var(--app-blue)]">
-                      {ev.title}
-                    </div>
-                  ))}
-                  {evts.length > 3 && (
-                    <div className="text-[10px] text-[var(--app-gray)]">+{evts.length-3} mais</div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+        {/* Estatísticas da semana */}
+        <View style={styles.weekStats}>
+          <View style={styles.statItem}>
+            <Text style={[styles.statNumber, { color: t.text }]}>{weekStats.totalTasks}</Text>
+            <Text style={[styles.statLabel, { color: t.textLight }]}>Tarefas</Text>
+          </View>
+          <View style={styles.statItem}>
+            <Text style={[styles.statNumber, { color: t.success }]}>{weekStats.completedTasks}</Text>
+            <Text style={[styles.statLabel, { color: t.textLight }]}>Concluídas</Text>
+          </View>
+          <View style={styles.statItem}>
+            <Text style={[styles.statNumber, { color: '#FF3B30' }]}>{weekStats.urgentTasks}</Text>
+            <Text style={[styles.statLabel, { color: t.textLight }]}>Urgentes</Text>
+          </View>
+        </View>
+      </View>
 
-      {/* Week View */}
-      {viewMode === 'week' && (
-        <>
-          {/* Week Days Header */}
-          <div className="grid grid-cols-7 gap-1 mb-4">
-            {weekDates.map((date, index) => {
-              const isToday = date.toDateString() === today.toDateString();
-              const isSelected = date.toDateString() === selectedDate.toDateString();
-              
-              return (
-                <button
-                  key={index}
-                  onClick={() => setSelectedDate(date)}
-                  className={`flex flex-col items-center py-3 rounded-xl transition-colors ${
-                    isSelected 
-                      ? 'bg-[var(--app-blue)] text-white' 
-                      : isToday
-                      ? 'bg-[var(--app-blue)]15 text-[var(--app-blue)]'
-                      : 'hover:bg-gray-100'
-                  }`}
-                >
-                  <span className="text-xs mb-1">{weekDays[index]}</span>
-                  <span className="text-lg font-medium">{date.getDate()}</span>
-                </button>
-              );
-            })}
-          </div>
+      {/* Grid de dias */}
+      <ScrollView style={styles.calendarGrid}>
+        {weekDays.map((day, index) => {
+          const dayTasks = getTasksForDay(day);
+          const isCurrentDay = isToday(day);
+          
+          return (
+            <View key={index} style={[styles.dayColumn, { backgroundColor: t.card }]}>
+              {/* Header do dia */}
+              <View style={[
+                styles.dayHeader,
+                isCurrentDay && { backgroundColor: t.primary + '20' }
+              ]}>
+                <Text style={[
+                  styles.dayName,
+                  { color: t.text },
+                  isWeekend(day) && { color: t.error },
+                  isCurrentDay && { color: t.primary, fontWeight: '600' }
+                ]}>
+                  {day.toLocaleDateString('pt-BR', { weekday: 'short' })}
+                </Text>
+                <Text style={[
+                  styles.dayNumber,
+                  { color: t.text },
+                  isCurrentDay && { color: t.primary, fontWeight: '600' }
+                ]}>
+                  {day.getDate()}
+                </Text>
+                {dayTasks.length > 0 && (
+                  <View style={[styles.taskCount, { backgroundColor: t.primary }]}>
+                    <Text style={[styles.taskCountText, { color: '#fff' }]}>
+                      {dayTasks.length}
+                    </Text>
+                  </View>
+                )}
+              </View>
 
-          {/* Events for Selected Day */}
-          <div className="flex-1">
-            <h3 className="font-medium text-gray-900 mb-4">
-              Eventos de {selectedDate.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
-            </h3>
-            
-            <div className="space-y-3">
-              {dayEvents(selectedDate).map((event: any) => (
-                <Card key={event.id} className="p-4 bg-white rounded-xl border-0 shadow-sm">
-                  <div className="flex items-start space-x-4">
-                    <div 
-                      className="w-1 h-16 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: event.color || 'var(--app-blue)' }}
-                    />
-                    <div className="flex-1">
-                      <h4 className="font-medium text-gray-900 mb-1">{event.title}</h4>
+              {/* Lista de tarefas do dia */}
+              <ScrollView style={styles.dayTasks} nestedScrollEnabled>
+                {dayTasks.length === 0 ? (
+                  <View style={styles.emptyDay}>
+                    <Text style={[styles.emptyText, { color: t.textLight }]}>
+                      Nenhuma tarefa
+                    </Text>
+                  </View>
+                ) : (
+                  dayTasks.map((task) => (
+                    <TouchableOpacity
+                      key={task.id}
+                      style={[
+                        styles.taskCard,
+                        { backgroundColor: t.background },
+                        task.priority === 'urgent' && { borderLeftColor: '#FF3B30', borderLeftWidth: 3 },
+                        task.priority === 'high' && { borderLeftColor: '#FF9500', borderLeftWidth: 3 },
+                        task.status === 'completed' && { opacity: 0.6 }
+                      ]}
+                      onPress={() => onTaskPress?.(task)}
+                    >
+                      <View style={styles.taskCardHeader}>
+                        <Text style={[
+                          styles.taskTitle,
+                          { color: t.text },
+                          task.status === 'completed' && { textDecorationLine: 'line-through' }
+                        ]}>
+                          {task.title}
+                        </Text>
+                        <View style={[styles.priorityIndicator, { backgroundColor: getPriorityColor(task.priority) }]} />
+                      </View>
                       
-                      <div className="flex items-center space-x-4 text-sm text-[var(--app-gray)] mb-2">
-                        <div className="flex items-center space-x-1">
-                          <Clock size={14} />
-                          <span>{formatTimeRange(event.start, event.end)}</span>
-                        </div>
-                        {'attendees' in event && event.attendees && (
-                          <div className="flex items-center space-x-1">
-                            <Users size={14} />
-                            <span>{event.attendees} pessoas</span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {'location' in event && event.location && (
-                        <div className="flex items-center space-x-1 text-sm text-[var(--app-gray)] mb-2">
-                          <MapPin size={14} />
-                          <span>{event.location}</span>
-                        </div>
+                      {task.tags.length > 0 && (
+                        <View style={styles.taskTags}>
+                          {task.tags.slice(0, 2).map((tag, tagIndex) => (
+                            <Text key={tagIndex} style={[styles.taskTag, { color: t.primary }]}>
+                              #{tag}
+                            </Text>
+                          ))}
+                          {task.tags.length > 2 && (
+                            <Text style={[styles.taskTag, { color: t.textLight }]}>
+                              +{task.tags.length - 2}
+                            </Text>
+                          )}
+                        </View>
                       )}
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
 
-      {/* Day View */}
-      {viewMode === 'day' && (
-        <div className="flex-1">
-          <div className="grid grid-cols-1 gap-1">
-            {Array.from({ length: 24 }, (_, hour) => (
-              <div key={hour} className="flex items-center border-b border-gray-100 py-3">
-                <div className="w-16 text-sm text-[var(--app-gray)] text-right pr-4">
-                  {hour.toString().padStart(2, '0')}:00
-                </div>
-                <div className="flex-1">
-                  {dayEvents(selectedDate)
-                    .filter(event => new Date(event.start).getHours() === hour)
-                    .map(event => (
-                      <div 
-                        key={event.id}
-                        className="p-3 rounded-lg mb-2"
-                        style={{ backgroundColor: `${(event.color || 'var(--app-blue)')}15` }}
-                      >
-                        <h4 className="font-medium text-gray-900 text-sm">{event.title}</h4>
-                        <p className="text-xs text-[var(--app-gray)]">{formatTimeRange(event.start, event.end)}</p>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+                      <View style={styles.taskMeta}>
+                        <View style={styles.taskStatus}>
+                          <View style={[styles.statusDot, { backgroundColor: task.status === 'completed' ? t.success : t.warning }]} />
+                          <Text style={[styles.statusText, { color: t.textLight }]}>
+                            {task.status.replace('_', ' ')}
+                          </Text>
+                        </View>
+                        
+                        {task.estimatedDuration && (
+                          <Text style={[styles.durationText, { color: t.textLight }]}>
+                            {task.estimatedDuration}min
+                          </Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          );
+        })}
+      </ScrollView>
+    </View>
   );
-};
+}
 
-export default CalendarView;
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  header: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  navigation: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  navButton: {
+    padding: 8,
+  },
+  todayButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,122,255,0.1)',
+  },
+  todayText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  weekTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  weekStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  statLabel: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  calendarGrid: {
+    flex: 1,
+  },
+  dayColumn: {
+    width: width / 7,
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(0,0,0,0.1)',
+    minHeight: 200,
+  },
+  dayHeader: {
+    padding: 8,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+    position: 'relative',
+  },
+  dayName: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  dayNumber: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  taskCount: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  taskCountText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  dayTasks: {
+    flex: 1,
+    padding: 4,
+  },
+  emptyDay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  emptyText: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  taskCard: {
+    padding: 8,
+    borderRadius: 8,
+    marginBottom: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  taskCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+  },
+  taskTitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    flex: 1,
+    lineHeight: 16,
+  },
+  priorityIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: 4,
+  },
+  taskTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 4,
+  },
+  taskTag: {
+    fontSize: 10,
+    marginRight: 4,
+  },
+  taskMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  taskStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 4,
+  },
+  statusText: {
+    fontSize: 10,
+    textTransform: 'capitalize',
+  },
+  durationText: {
+    fontSize: 10,
+  },
+});

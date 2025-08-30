@@ -7,6 +7,7 @@ import bcrypt from 'bcryptjs';
 import pino from 'pino';
 
 import * as Sentry from '@sentry/node';
+import { transcriptionService } from './transcription-service';
 
 dotenv.config();
 const logger = pino({ transport: { target: 'pino-pretty' } });
@@ -16,8 +17,15 @@ app.use(express.json());
 
 // Sentry (Observability)
 if (process.env.SENTRY_DSN) {
-  Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 0.1 });
-  app.use(Sentry.Handlers.requestHandler());
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    tracesSampleRate: 0.1, // ajusta amostragem de performance
+  });
+  // middleware de erro no Sentry 8
+  app.use((err: any, _req: express.Request, _res: express.Response, next: express.NextFunction) => {
+    Sentry.captureException(err);
+    next(err); // mantém comportamento padrão do Express
+  });
 }
 
 const MONGO_URL = process.env.MONGO_URL || 'mongodb://localhost:27017/lifehub';
@@ -54,7 +62,52 @@ const NoteSchema = new Schema({
   userId: { type: String, index: true },
   title: { type: String, required: true },
   content: { type: String, default: '' },
+  type: { type: String, enum: ['text', 'voice', 'image'], default: 'text' },
+  notebook: { type: String, default: 'Geral' },
   tags: [{ type: String }],
+  attachments: [{
+    id: { type: String },
+    type: { type: String, enum: ['image', 'audio', 'file'] },
+    url: { type: String },
+    name: { type: String },
+    size: { type: Number },
+    createdAt: { type: Date }
+  }],
+  aiSummary: { type: String, default: '' },
+  transcription: { 
+    text: { type: String, default: '' },
+    status: { 
+      type: String, 
+      enum: ['pending', 'processing', 'completed', 'failed', 'not_applicable'], 
+      default: 'not_applicable' 
+    },
+    confidence: { type: Number, default: 0 },
+    language: { type: String, default: 'pt-BR' },
+    processedAt: { type: Date },
+    error: { type: String }
+  },
+  isPinned: { type: Boolean, default: false },
+  isArchived: { type: Boolean, default: false },
+  versionHistory: [{
+    content: { type: String },
+    updatedAt: { type: Date, default: Date.now }
+  }],
+  // Sync and sharing fields
+  syncStatus: {
+    synced: { type: Boolean, default: false },
+    lastSynced: { type: Date },
+    syncVersion: { type: Number, default: 0 }
+  },
+  sharing: {
+    isShared: { type: Boolean, default: false },
+    sharedWith: [{
+      userId: { type: String },
+      permission: { type: String, enum: ['view', 'edit', 'comment'], default: 'view' },
+      sharedAt: { type: Date, default: Date.now }
+    }],
+    publicLink: { type: String },
+    linkExpires: { type: Date }
+  }
 }, { timestamps: true });
 
 const SuggestionSchema = new Schema({
@@ -187,7 +240,7 @@ const WeeklyQuest = model('WeeklyQuest', WeeklyQuestSchema);
 
 
 // Auth
-const authMiddleware = (req: any, res: any, next: any) => {
+  const authMiddleware = (req: any, res: any, next: any) => {
   const authHeader = req.headers.authorization as string | undefined;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
   try {
@@ -199,7 +252,7 @@ const authMiddleware = (req: any, res: any, next: any) => {
 
   // fallback X-User-Id header
   if (!req.userId && req.headers['x-user-id']) {
-    req.userId = String(req.headers['x-user-id']);
+    req.userId = String(req.headers['x-user-id'] || '');
   }
   if (!req.userId) {
     return res.status(401).json({ error: 'unauthorized' });
@@ -213,9 +266,9 @@ app.post('/auth/register', async (req, res) => {
   const exists = await User.findOne({ email });
   if (exists) return res.status(409).json({ error: 'email already registered' });
   const passwordHash = await bcrypt.hash(password, 10);
-  const user = await User.create({ email, passwordHash, name });
+  const user = await User.create({ email, passwordHash, name: name ?? '' });
   const token = jwt.sign({}, process.env.JWT_SECRET || 'devsecret', { subject: String(user._id) });
-  res.status(201).json({ token, user: { id: user._id, email: user.email, name: user.name } });
+  res.status(201).json({ token, user: { id: user._id, email: user.email, name: user.name ?? '' } });
 });
 
 app.post('/auth/login', async (req, res) => {
@@ -255,20 +308,265 @@ app.delete('/tasks/:id', async (req, res) => {
 // Notes CRUD
 app.get('/notes', async (req: any, res) => {
   const userId = String(req.userId);
-  res.json(await Note.find({ userId }).sort({ createdAt: -1 }));
+  const { notebook, type, isPinned, isArchived, search } = req.query;
+  
+  let query: any = { userId };
+  
+  if (notebook) query.notebook = notebook;
+  if (type) query.type = type;
+  if (isPinned !== undefined) query.isPinned = isPinned === 'true';
+  if (isArchived !== undefined) query.isArchived = isArchived === 'true';
+  
+  if (search) {
+    query.$or = [
+      { title: { $regex: search, $options: 'i' } },
+      { content: { $regex: search, $options: 'i' } },
+      { tags: { $in: [new RegExp(search as string, 'i')] } }
+    ];
+  }
+  
+  res.json(await Note.find(query).sort({ isPinned: -1, createdAt: -1 }));
 });
+
+app.get('/notes/notebooks', async (req: any, res) => {
+  const userId = String(req.userId);
+  const notebooks = await Note.distinct('notebook', { userId });
+  res.json(notebooks);
+});
+
+app.get('/notes/:id', async (req: any, res) => {
+  const note = await Note.findById(req.params.id);
+  if (!note) return res.status(404).json({ error: 'Note not found' });
+  res.json(note);
+});
+
 app.post('/notes', async (req: any, res) => {
   const userId = String(req.userId);
   const n = await Note.create({ ...req.body, userId });
   res.status(201).json(n);
 });
+
 app.patch('/notes/:id', async (req, res) => {
-  const n = await Note.findByIdAndUpdate(req.params.id, req.body, { new: true });
-  res.json(n);
+  const note = await Note.findById(req.params.id);
+  if (!note) return res.status(404).json({ error: 'Note not found' });
+  
+  // Save current content to version history before updating
+  if (req.body.content && req.body.content !== note.content) {
+    note.versionHistory.push({
+      content: note.content,
+      updatedAt: new Date()
+    });
+    await note.save();
+  }
+  
+  const updatedNote = await Note.findByIdAndUpdate(req.params.id, req.body, { new: true });
+  res.json(updatedNote);
 });
+
 app.delete('/notes/:id', async (req, res) => {
   await Note.findByIdAndDelete(req.params.id);
   res.status(204).end();
+});
+
+// Enhanced Notes Features
+app.post('/notes/:id/pin', async (req, res) => {
+  const note = await Note.findByIdAndUpdate(
+    req.params.id,
+    { isPinned: true },
+    { new: true }
+  );
+  res.json(note);
+});
+
+app.post('/notes/:id/unpin', async (req, res) => {
+  const note = await Note.findByIdAndUpdate(
+    req.params.id,
+    { isPinned: false },
+    { new: true }
+  );
+  res.json(note);
+});
+
+app.post('/notes/:id/archive', async (req, res) => {
+  const note = await Note.findByIdAndUpdate(
+    req.params.id,
+    { isArchived: true },
+    { new: true }
+  );
+  res.json(note);
+});
+
+app.post('/notes/:id/unarchive', async (req, res) => {
+  const note = await Note.findByIdAndUpdate(
+    req.params.id,
+    { isArchived: false },
+    { new: true }
+  );
+  res.json(note);
+});
+
+app.get('/notes/:id/versions', async (req, res) => {
+  const note = await Note.findById(req.params.id);
+  if (!note) return res.status(404).json({ error: 'Note not found' });
+  res.json(note.versionHistory);
+});
+
+app.post('/notes/:id/restore/:versionIndex', async (req, res) => {
+  const note = await Note.findById(req.params.id);
+  if (!note) return res.status(404).json({ error: 'Note not found' });
+  
+  const versionIndex = parseInt(req.params.versionIndex);
+  if (versionIndex < 0 || versionIndex >= note.versionHistory.length) {
+    return res.status(400).json({ error: 'Invalid version index' });
+  }
+  
+  const version = note.versionHistory[versionIndex];
+  note.content = version.content;
+  note.versionHistory.push({
+    content: note.content,
+    updatedAt: new Date()
+  });
+  
+  await note.save();
+  res.json(note);
+});
+
+// Notes search with RAG-like functionality
+app.get('/notes/search/advanced', async (req: any, res) => {
+  const userId = String(req.userId);
+  const { q, notebook, type, tags, dateFrom, dateTo } = req.query;
+  
+  let query: any = { userId };
+  
+  if (q) {
+    query.$or = [
+      { title: { $regex: q, $options: 'i' } },
+      { content: { $regex: q, $options: 'i' } },
+      { aiSummary: { $regex: q, $options: 'i' } }
+    ];
+  }
+  
+  if (notebook) query.notebook = notebook;
+  if (type) query.type = type;
+  if (tags) query.tags = { $in: tags.split(',') };
+  
+  if (dateFrom || dateTo) {
+    query.createdAt = {};
+    if (dateFrom) query.createdAt.$gte = new Date(dateFrom);
+    if (dateTo) query.createdAt.$lte = new Date(dateTo);
+  }
+  
+  const notes = await Note.find(query).sort({ createdAt: -1 });
+  res.json(notes);
+});
+
+// AI Summary generation (stub - would integrate with actual AI service)
+app.post('/notes/:id/summarize', async (req, res) => {
+  const note = await Note.findById(req.params.id);
+  if (!note) return res.status(404).json({ error: 'Note not found' });
+  
+  // Simulate AI summary generation
+  const summary = `Resumo gerado para: ${note.title}. ${note.content.substring(0, 100)}...`;
+  note.aiSummary = summary;
+  await note.save();
+  
+  res.json({ summary });
+});
+
+// Notes statistics
+app.get('/notes/stats', async (req: any, res) => {
+  const userId = String(req.userId);
+  
+  const totalNotes = await Note.countDocuments({ userId });
+  const pinnedNotes = await Note.countDocuments({ userId, isPinned: true });
+  const archivedNotes = await Note.countDocuments({ userId, isArchived: true });
+  const notebooks = await Note.distinct('notebook', { userId });
+  const noteTypes = await Note.aggregate([
+    { $match: { userId } },
+    { $group: { _id: '$type', count: { $sum: 1 } } }
+  ]);
+  
+  res.json({
+    totalNotes,
+    pinnedNotes,
+    archivedNotes,
+    notebookCount: notebooks.length,
+    noteTypes
+  });
+});
+
+// Transcription endpoints
+app.post('/notes/:id/transcribe', async (req: express.Request, res: express.Response) => {
+  try {
+    const note = await Note.findById(req.params.id);
+    if (!note) {
+      return res.status(404).json({ error: 'Note not found' });
+    }
+    
+    if (note.type !== 'voice') {
+      return res.status(400).json({ error: 'Only voice notes can be transcribed' });
+    }
+    
+    // Add null check for attachments
+    const audioAttachment = note.attachments?.find((att: any) => att.type === 'audio');
+    if (!audioAttachment) {
+      return res.status(400).json({ error: 'No audio attachment found' });
+    }
+    
+    // Start transcription process
+    await transcriptionService.processVoiceNote(
+      req.params.id, 
+      audioAttachment.url, 
+      req.body.language || 'pt-BR'
+    );
+    
+    res.json({ 
+      message: 'Transcription started', 
+      status: 'processing',
+      noteId: req.params.id
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/notes/:id/transcription/status', async (req: express.Request, res: express.Response) => {
+  try {
+    const status = await transcriptionService.getTranscriptionStatus(req.params.id);
+    if (!status) {
+      return res.status(404).json({ error: 'Transcription not found' });
+    }
+    res.json(status);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/notes/:id/transcription/retry', async (req: express.Request, res: express.Response) => {
+  try {
+    await transcriptionService.retryTranscription(req.params.id);
+    res.json({ message: 'Transcription retry initiated' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/notes/:id/transcription/cancel', async (req: any, res) => {
+  try {
+    await transcriptionService.cancelTranscription(req.params.id);
+    res.json({ message: 'Transcription cancelled' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/transcriptions/process-pending', async (req: any, res) => {
+  try {
+    await transcriptionService.processPendingTranscriptions();
+    res.json({ message: 'Processing pending transcriptions' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Suggestions CRUD
@@ -340,7 +638,7 @@ async function checkAchievements(userId: string) {
   const achievements = [];
   
   // Task completion achievements
-  const completedTasks = await Task.countDocuments({ userId, completed: true });
+  const completedTasks = await Task.countDocuments({ userId, status: 'completed' });
   if (completedTasks >= 10 && !stats.achievements.includes('task_master_10')) {
     achievements.push({
       type: 'task_completion',
@@ -565,12 +863,153 @@ app.post('/integrations/google/import', async (req: any, res) => {
   }
 });
 
-// Outlook (stub)
-app.get('/integrations/outlook/auth-url', async (_req: any, res) => {
-  res.json({ url: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize?...' });
+// Outlook OAuth token storage
+const OutlookAuthSchema = new Schema({
+  userId: { type: String, index: true, unique: true },
+  accessToken: { type: String },
+  refreshToken: { type: String },
+  expiryDate: { type: Date },
+  scope: { type: String }
+}, { timestamps: true });
+const OutlookAuth = model('OutlookAuth', OutlookAuthSchema);
+
+// Outlook OAuth endpoints
+app.get('/integrations/outlook/auth-url', async (req: any, res) => {
+  const clientId = process.env.OUTLOOK_CLIENT_ID;
+  const redirectUri = process.env.OUTLOOK_REDIRECT_URI;
+  if (!clientId || !redirectUri) return res.status(500).json({ error: 'outlook oauth not configured' });
+  const scope = encodeURIComponent('offline_access https://graph.microsoft.com/Calendars.Read');
+  const state = Math.random().toString(36).slice(2);
+  const url = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&state=${state}`;
+  res.json({ url, state });
 });
-app.post('/integrations/outlook/import', async (_req: any, res) => {
-  res.json({ imported: 3, status: 'ok' });
+
+app.post('/integrations/outlook/oauth/callback', async (req: any, res) => {
+  const { code, redirectUri } = req.body || {};
+  const clientId = process.env.OUTLOOK_CLIENT_ID;
+  const clientSecret = process.env.OUTLOOK_CLIENT_SECRET;
+  const finalRedirect = redirectUri || process.env.OUTLOOK_REDIRECT_URI;
+  if (!code || !clientId || !clientSecret || !finalRedirect) return res.status(400).json({ error: 'missing oauth config or code' });
+  try {
+    const tokenRes = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: finalRedirect,
+        grant_type: 'authorization_code'
+      }) as any
+    } as any);
+    if (!tokenRes.ok) {
+      const t = await tokenRes.text();
+      return res.status(400).json({ error: 'token_exchange_failed', details: t });
+    }
+    const json = await tokenRes.json() as any;
+    const expiresIn = json.expires_in ? Number(json.expires_in) : 3600;
+    const expiryDate = new Date(Date.now() + expiresIn * 1000);
+    await OutlookAuth.findOneAndUpdate(
+      { userId: String(req.userId) },
+      { accessToken: json.access_token, refreshToken: json.refresh_token, expiryDate, scope: json.scope },
+      { upsert: true, new: true }
+    );
+    res.json({ ok: true });
+  } catch (e: any) {
+    res.status(500).json({ error: 'oauth_callback_error', details: String(e?.message || e) });
+  }
+});
+
+async function getValidOutlookAccessToken(userId: string) {
+  const doc = await OutlookAuth.findOne({ userId });
+  if (!doc) return null;
+  const clientId = process.env.OUTLOOK_CLIENT_ID as string;
+  const clientSecret = process.env.OUTLOOK_CLIENT_SECRET as string;
+  if (!doc.expiryDate || doc.expiryDate.getTime() - Date.now() > 60 * 1000) {
+    return doc.accessToken;
+  }
+  if (!doc.refreshToken) return doc.accessToken;
+  const refreshRes = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: doc.refreshToken,
+      grant_type: 'refresh_token'
+    }) as any
+  } as any);
+  if (!refreshRes.ok) return doc.accessToken;
+  const json = await refreshRes.json() as any;
+  const expiresIn = json.expires_in ? Number(json.expires_in) : 3600;
+  doc.accessToken = json.access_token || doc.accessToken;
+  doc.expiryDate = new Date(Date.now() + expiresIn * 1000);
+  await doc.save();
+  return doc.accessToken;
+}
+
+app.get('/integrations/outlook/events', async (req: any, res) => {
+  try {
+    const token = await getValidOutlookAccessToken(String(req.userId));
+    if (!token) return res.status(400).json({ error: 'not_connected' });
+    const startDateTime = new Date().toISOString();
+    const endDateTime = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const url = `https://graph.microsoft.com/v1.0/me/calendarview?startDateTime=${encodeURIComponent(startDateTime)}&endDateTime=${encodeURIComponent(endDateTime)}&$orderby=start/dateTime`;
+    const resp = await fetch(url, { 
+      headers: { 
+        Authorization: `Bearer ${token}`,
+        'Prefer': 'outlook.timezone="UTC"'
+      } 
+    } as any);
+    if (!resp.ok) {
+      const txt = await resp.text();
+      return res.status(400).json({ error: 'outlook_api_error', details: txt });
+    }
+    const json = await resp.json() as any;
+    const events = (json.value || []).map((it: any) => ({ 
+      id: it.id, 
+      title: it.subject || 'Evento', 
+      start: it.start?.dateTime || it.start?.date, 
+      end: it.end?.dateTime || it.end?.date, 
+      location: it.location?.displayName 
+    }));
+    res.json({ events });
+  } catch (e: any) {
+    res.status(500).json({ error: 'list_events_error', details: String(e?.message || e) });
+  }
+});
+
+app.post('/integrations/outlook/import', async (req: any, res) => {
+  try {
+    const token = await getValidOutlookAccessToken(String(req.userId));
+    if (!token) return res.status(400).json({ error: 'not_connected' });
+    const startDateTime = new Date().toISOString();
+    const endDateTime = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const url = `https://graph.microsoft.com/v1.0/me/calendarview?startDateTime=${encodeURIComponent(startDateTime)}&endDateTime=${encodeURIComponent(endDateTime)}&$orderby=start/dateTime`;
+    const resp = await fetch(url, { 
+      headers: { 
+        Authorization: `Bearer ${token}`,
+        'Prefer': 'outlook.timezone="UTC"'
+      } 
+    } as any);
+    if (!resp.ok) {
+      const txt = await resp.text();
+      return res.status(400).json({ error: 'outlook_api_error', details: txt });
+    }
+    const json = await resp.json() as any;
+    const items = (json.value || []).map((it: any) => ({
+      userId: String(req.userId),
+      title: it.subject || 'Evento',
+      start: new Date(it.start?.dateTime || it.start?.date || Date.now()),
+      end: new Date(it.end?.dateTime || it.end?.date || Date.now()),
+      location: it.location?.displayName,
+      source: 'outlook'
+    }));
+    await Event.insertMany(items, { ordered: false }).catch(() => {});
+    res.json({ imported: items.length, status: 'ok' });
+  } catch (e: any) {
+    res.status(500).json({ error: 'import_error', details: String(e?.message || e) });
+  }
 });
 
 // Trello / CSV import (stub)
@@ -630,7 +1069,11 @@ app.post('/gamification/quests/refresh', async (req: any, res) => {
 
 // Sentry error handler
 if (process.env.SENTRY_DSN) {
-  app.use(Sentry.Handlers.errorHandler());
+  // Use custom error handler instead of Sentry.errorHandler() which may not exist
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    Sentry.captureException(err);
+    next(err);
+  });
 }
 
 // Enhanced Orchestrator with better heuristics
@@ -713,7 +1156,7 @@ app.post('/orchestrator/reschedule', async (req, res) => {
 app.post('/ai/predict-duration', async (req: any, res) => {
   const { task } = req.body || {};
   // naive: base on title length and historical average from completed tasks
-  const hist = await Task.find({ userId: req.userId, completed: true }).limit(50);
+  const hist = await Task.find({ userId: req.userId, status: 'completed' }).limit(50);
   const avg = hist.length ? Math.round(hist.reduce((s: number, t: any) => s + (t.durationMin || 30), 0) / hist.length) : 30;
   const titleFactor = Math.min(60, Math.max(15, (task?.title?.length || 10)));
   const predicted = Math.round((avg + titleFactor) / 2);
@@ -746,7 +1189,7 @@ app.post('/ai/ideal-week', (req, res) => {
 
 // Digital health
 app.get('/health/digital', async (req: any, res) => {
-  const todayTasks = await Task.countDocuments({ userId: req.userId, completed: false });
+  const todayTasks = await Task.countDocuments({ userId: req.userId, status: { $ne: 'completed' } });
   const overload = todayTasks > 12;
   res.json({ overload, suggestion: overload ? 'Agende descanso 15min e renegocie prazos' : 'Tudo sob controle' });
 });
@@ -858,7 +1301,7 @@ app.post('/assistant/voice/command', async (req: any, res) => {
       case 'add_note':
         result = await Note.create({
           userId,
-          title: parsed.content.substring(0, 50),
+          title: parsed.content.substring(0, 50) || 'Nova nota',
           content: parsed.content,
           type: 'text',
           createdAt: new Date(),
@@ -871,8 +1314,8 @@ app.post('/assistant/voice/command', async (req: any, res) => {
           userId,
           title: parsed.title,
           description: '',
-          startTime: new Date(),
-          endTime: new Date(Date.now() + 60 * 60 * 1000), // 1 hora
+          start: new Date(),
+          end: new Date(Date.now() + 60 * 60 * 1000), // 1 hora
           location: '',
           createdAt: new Date(),
           updatedAt: new Date()
@@ -882,11 +1325,9 @@ app.post('/assistant/voice/command', async (req: any, res) => {
       case 'add_habit':
         result = await Habit.create({
           userId,
-          title: parsed.title,
-          description: '',
-          frequency: 'daily',
-          targetCount: 1,
-          currentCount: 0,
+          name: parsed.title,
+          schedule: 'daily',
+          target: 1,
           createdAt: new Date(),
           updatedAt: new Date()
         });
@@ -988,8 +1429,8 @@ app.get('/today/items', async (req: any, res) => {
     // Buscar eventos de hoje
     const events = await Event.find({
       userId,
-      startTime: { $gte: today, $lt: tomorrow }
-    }).sort({ startTime: 1 });
+      start: { $gte: today, $lt: tomorrow }
+    }).sort({ start: 1 });
     
     // Buscar hábitos do dia
     const habits = await Habit.find({
@@ -1011,11 +1452,11 @@ app.get('/today/items', async (req: any, res) => {
       timelineItems.push({
         id: `task_${task._id}`,
         type: 'task',
-        title: task.title,
-        time: task.dueDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        description: task.description,
-        priority: task.priority,
-        status: task.status
+        title: task.title || '',
+        time: task.dueDate ? task.dueDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+        description: task.description || '',
+        priority: task.priority || 'medium',
+        status: task.status || 'pending'
       });
     });
     
@@ -1024,22 +1465,23 @@ app.get('/today/items', async (req: any, res) => {
       timelineItems.push({
         id: `event_${event._id}`,
         type: 'event',
-        title: event.title,
-        time: event.startTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        description: event.description,
-        location: event.location
+        title: event.title || '',
+        time: event.start ? event.start.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+        description: event.description || '',
+        location: event.location || ''
       });
     });
     
     // Adicionar hábitos
     habits.forEach(habit => {
+      const habitDoc = habit as any; // Type cast to access properties
       timelineItems.push({
         id: `habit_${habit._id}`,
         type: 'habit',
-        title: habit.title,
+        title: habitDoc.name || '',
         time: 'Hoje',
-        description: `${habit.currentCount}/${habit.targetCount} completos`,
-        progress: habit.currentCount / habit.targetCount
+        description: `0/${habitDoc.target || 1} completos`,
+        progress: 0
       });
     });
     
@@ -1112,7 +1554,7 @@ app.post('/notifications/next-window', async (req: any, res) => {
     }
     
     // Task completion pattern
-    const completedToday = recentTasks.filter((t: any) => t.completed && 
+    const completedToday = recentTasks.filter((t: any) => t.status === 'completed' && 
       new Date(t.createdAt).toDateString() === now.toDateString()).length;
     if (completedToday >= 3) score += 10; // User is productive today
     else if (completedToday === 0) score -= 5; // User hasn't completed anything today
@@ -1209,7 +1651,7 @@ app.get('/reports/weekly-insights', async (req: any, res) => {
   if (sleepData.length > 0) {
     const avgSleep = sleepData.reduce((sum: number, h: number) => sum + h, 0) / sleepData.length;
     const lowSleepDays = sleepData.filter(h => h < 6).length;
-    const completedTasks = tasks.filter(t => t.completed).length;
+    const completedTasks = tasks.filter(t => t.status === 'completed').length;
     const totalTasks = tasks.length;
     
     if (lowSleepDays > 0 && totalTasks > 0) {
@@ -1261,7 +1703,7 @@ app.get('/reports/weekly-insights', async (req: any, res) => {
   
   // Task completion patterns
   if (tasks.length > 0) {
-    const completedTasks = tasks.filter(t => t.completed);
+    const completedTasks = tasks.filter(t => t.status === 'completed');
     const completionRate = (completedTasks.length / tasks.length) * 100;
     
     insights.push({
@@ -1280,7 +1722,7 @@ app.get('/reports/weekly-insights', async (req: any, res) => {
     summary: {
       totalCheckins: checkins.length,
       totalTasks: tasks.length,
-      completedTasks: tasks.filter(t => t.completed).length,
+      completedTasks: tasks.filter(t => t.status === 'completed').length,
       avgEnergy: energyData.length > 0 ? (energyData.reduce((sum: number, e: number) => sum + e, 0) / energyData.length).toFixed(1) : 'N/A',
       avgMood: moodData.length > 0 ? (moodData.reduce((sum: number, m: number) => sum + m, 0) / moodData.length).toFixed(1) : 'N/A'
     }
@@ -1297,3 +1739,5 @@ app.post('/assistant/ritual/pre-deep-work', async (req, res) => {
 
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 4000;
 app.listen(port, () => logger.info(`api on ${port}`));
+
+export default app;
