@@ -43,5 +43,19 @@ export const api = {
   createEvent: (data: any) => http('/events', { method: 'POST', body: JSON.stringify(data) }),
   updateEvent: (id: string, data: any) => http(`/events/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteEvent: (id: string) => http(`/events/${id}`, { method: 'DELETE' }),
+
+  // Integrations - Trello
+  trelloBoards: () => http('/integrations/trello/boards'),
+  trelloLists: (boardId: string) => http(`/integrations/trello/boards/${boardId}/lists`),
+  trelloImport: (payload: { boardId: string; listId?: string }) => http('/integrations/trello/import', { method: 'POST', body: JSON.stringify(payload) }),
+
+  // Integrations - Asana
+  asanaWorkspaces: () => http('/integrations/asana/workspaces'),
+  asanaProjects: (workspaceId: string) => http(`/integrations/asana/workspaces/${workspaceId}/projects`),
+  asanaImport: (payload: { workspaceId: string; projectId?: string; includeSubtasks?: boolean }) => http('/integrations/asana/import', { method: 'POST', body: JSON.stringify(payload) }),
+
+  // OAuth2 stubs
+  oauthAuthorizeUrl: (provider: string) => http(`/oauth/${provider}/authorize`),
+  oauthCallback: (provider: string, payload: { code: string }) => http(`/oauth/${provider}/callback`, { method: 'POST', body: JSON.stringify(payload) }),
 };
 

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSettings, Integration } from '../store/settings';
+import { api } from '../services/api';
 
 interface IntegrationsModalProps {
   visible: boolean;
@@ -27,10 +28,17 @@ export default function IntegrationsModal({
     disconnectIntegration,
     syncIntegration,
     updateIntegration,
+    importSettings,
+    updateImportSettings,
   } = useSettings();
 
   const [connecting, setConnecting] = useState<string | null>(null);
   const [syncing, setSyncing] = useState<string | null>(null);
+  const [trelloBoards, setTrelloBoards] = useState<any[] | null>(null);
+  const [trelloLists, setTrelloLists] = useState<any[] | null>(null);
+  const [asanaWorkspaces, setAsanaWorkspaces] = useState<any[] | null>(null);
+  const [asanaProjects, setAsanaProjects] = useState<any[] | null>(null);
+  const [loadingImport, setLoadingImport] = useState<string | null>(null);
 
   const getProviderIcon = (provider: Integration['provider']) => {
     switch (provider) {
@@ -46,6 +54,8 @@ export default function IntegrationsModal({
         return 'chatbubbles';
       case 'github':
         return 'logo-github';
+      case 'asana':
+        return 'briefcase';
       default:
         return 'link';
     }
@@ -65,6 +75,8 @@ export default function IntegrationsModal({
         return '#4A154B';
       case 'github':
         return '#333333';
+      case 'asana':
+        return '#F06A6A';
       default:
         return '#666666';
     }
@@ -84,9 +96,75 @@ export default function IntegrationsModal({
         return 'Receba notificações e atualizações';
       case 'github':
         return 'Sincronize issues e pull requests';
+      case 'asana':
+        return 'Importe tarefas e projetos do Asana';
       default:
         return 'Integração personalizada';
     }
+  };
+
+  const fetchTrelloBoards = async () => {
+    setLoadingImport('trello');
+    try {
+      const boards = await api.trelloBoards();
+      setTrelloBoards(boards || []);
+    } catch {}
+    setLoadingImport(null);
+  };
+
+  const fetchTrelloLists = async (boardId: string) => {
+    setLoadingImport('trello');
+    try {
+      const lists = await api.trelloLists(boardId);
+      setTrelloLists(lists || []);
+      updateImportSettings({ trello: { ...importSettings.trello, defaultBoardId: boardId } });
+    } catch {}
+    setLoadingImport(null);
+  };
+
+  const importFromTrello = async () => {
+    setLoadingImport('trello');
+    try {
+      await api.trelloImport({ boardId: importSettings.trello?.defaultBoardId!, listId: importSettings.trello?.defaultListId });
+      Alert.alert('Sucesso', 'Importação do Trello iniciada.');
+    } catch {
+      Alert.alert('Erro', 'Falha ao iniciar importação do Trello.');
+    }
+    setLoadingImport(null);
+  };
+
+  const fetchAsanaWorkspaces = async () => {
+    setLoadingImport('asana');
+    try {
+      const workspaces = await api.asanaWorkspaces();
+      setAsanaWorkspaces(workspaces || []);
+    } catch {}
+    setLoadingImport(null);
+  };
+
+  const fetchAsanaProjects = async (workspaceId: string) => {
+    setLoadingImport('asana');
+    try {
+      const projects = await api.asanaProjects(workspaceId);
+      setAsanaProjects(projects || []);
+      updateImportSettings({ asana: { ...importSettings.asana, defaultWorkspaceId: workspaceId } });
+    } catch {}
+    setLoadingImport(null);
+  };
+
+  const importFromAsana = async () => {
+    setLoadingImport('asana');
+    try {
+      await api.asanaImport({
+        workspaceId: importSettings.asana?.defaultWorkspaceId!,
+        projectId: importSettings.asana?.defaultProjectId,
+        includeSubtasks: importSettings.asana?.includeSubtasks,
+      });
+      Alert.alert('Sucesso', 'Importação do Asana iniciada.');
+    } catch {
+      Alert.alert('Erro', 'Falha ao iniciar importação do Asana.');
+    }
+    setLoadingImport(null);
   };
 
   const handleConnect = async (provider: Integration['provider']) => {
@@ -237,6 +315,90 @@ export default function IntegrationsModal({
                 {integration.permissions.join(', ')}
               </Text>
             </View>
+
+            {(integration.provider === 'trello' || integration.provider === 'asana') && (
+              <View style={{ marginTop: 8 }}>
+                <Text style={styles.settingLabel}>Importação de tarefas</Text>
+
+                {integration.provider === 'trello' && (
+                  <>
+                    <View style={styles.settingRow}>
+                      <TouchableOpacity style={styles.smallButton} onPress={fetchTrelloBoards}>
+                        <Text style={styles.smallButtonText}>Carregar Boards</Text>
+                      </TouchableOpacity>
+                    </View>
+                    {trelloBoards && (
+                      <View style={styles.settingRow}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                          {trelloBoards.map((b: any) => (
+                            <TouchableOpacity key={b.id} style={styles.chip} onPress={() => fetchTrelloLists(b.id)}>
+                              <Text style={styles.chipText}>{b.name}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    )}
+                    {trelloLists && (
+                      <View style={styles.settingRow}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                          {trelloLists.map((l: any) => (
+                            <TouchableOpacity
+                              key={l.id}
+                              style={[styles.chip, importSettings.trello?.defaultListId === l.id && styles.chipActive]}
+                              onPress={() => updateImportSettings({ trello: { ...importSettings.trello, defaultListId: l.id } })}
+                            >
+                              <Text style={styles.chipText}>{l.name}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    )}
+                    <TouchableOpacity style={styles.secondaryButton} disabled={loadingImport === 'trello'} onPress={importFromTrello}>
+                      <Text style={styles.secondaryButtonText}>{loadingImport === 'trello' ? 'Importando...' : 'Importar do Trello'}</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+
+                {integration.provider === 'asana' && (
+                  <>
+                    <View style={styles.settingRow}>
+                      <TouchableOpacity style={styles.smallButton} onPress={fetchAsanaWorkspaces}>
+                        <Text style={styles.smallButtonText}>Carregar Workspaces</Text>
+                      </TouchableOpacity>
+                    </View>
+                    {asanaWorkspaces && (
+                      <View style={styles.settingRow}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                          {asanaWorkspaces.map((w: any) => (
+                            <TouchableOpacity key={w.id} style={styles.chip} onPress={() => fetchAsanaProjects(w.id)}>
+                              <Text style={styles.chipText}>{w.name}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    )}
+                    {asanaProjects && (
+                      <View style={styles.settingRow}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                          {asanaProjects.map((p: any) => (
+                            <TouchableOpacity
+                              key={p.id}
+                              style={[styles.chip, importSettings.asana?.defaultProjectId === p.id && styles.chipActive]}
+                              onPress={() => updateImportSettings({ asana: { ...importSettings.asana, defaultProjectId: p.id } })}
+                            >
+                              <Text style={styles.chipText}>{p.name}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    )}
+                    <TouchableOpacity style={styles.secondaryButton} disabled={loadingImport === 'asana'} onPress={importFromAsana}>
+                      <Text style={styles.secondaryButtonText}>{loadingImport === 'asana' ? 'Importando...' : 'Importar do Asana'}</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            )}
           </View>
 
           <View style={styles.integrationActions}>
@@ -528,6 +690,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     marginLeft: 8,
+  },
+  smallButton: {
+    backgroundColor: '#EEF3FF',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  smallButtonText: {
+    color: '#2d5bd1',
+    fontWeight: '600',
+  },
+  chip: {
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    marginRight: 8,
+  },
+  chipActive: {
+    backgroundColor: '#DDE7FF',
+  },
+  secondaryButton: {
+    marginTop: 8,
+    backgroundColor: '#F5F5F5',
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    color: '#111',
+    fontWeight: '600',
   },
   connectionActions: {
     alignItems: 'center',
