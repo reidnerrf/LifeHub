@@ -1,4 +1,4 @@
-import { useProductivity, ProductivityDataPoint, ProductivityInsight, ProductivityTrend } from '../store/productivity';
+import { useProductivity, ProductivityDataPoint, ProductivityInsight, ProductivityTrend, ProductivityMetric, ProductivitySession } from '../store/productivity';
 import { mlOptimizationService } from './mlOptimizationService';
 
 export interface AnalysisResult {
@@ -69,11 +69,15 @@ export class ProductivityAnalysisService {
     if (avgFocus < 60) {
       recommendations.push({
         id: `rec-${Date.now()}-1`,
-        type: 'schedule',
+        type: 'recommendation',
         title: 'Pouco tempo de foco recente',
         description: 'Reserve sessões de foco de 25min com pausas curtas (técnica Pomodoro).',
+        severity: 'high',
+        category: 'focus',
+        data: { expectedImpact: 12 },
+        generatedAt: new Date(),
+        isRead: false,
         priority: 'high',
-        expectedImpact: 12,
         createdAt: new Date().toISOString(),
       });
     }
@@ -81,11 +85,15 @@ export class ProductivityAnalysisService {
     if (avgHabits < 60) {
       recommendations.push({
         id: `rec-${Date.now()}-2`,
-        type: 'habits',
+        type: 'recommendation',
         title: 'Consistência de hábitos baixa',
         description: 'Reforce hábitos-chave como sono, hidratação e pausas planejadas.',
+        severity: 'medium',
+        category: 'habits',
+        data: { expectedImpact: 10 },
+        generatedAt: new Date(),
+        isRead: false,
         priority: 'medium',
-        expectedImpact: 10,
         createdAt: new Date().toISOString(),
       });
     }
@@ -108,11 +116,15 @@ export class ProductivityAnalysisService {
     const ml = await mlOptimizationService.analyzeProductivity(data);
     const insights: ProductivityInsight[] = ml.recommendations.map((r, idx) => ({
       id: `ml-${Date.now()}-${idx}`,
-      type: r.type,
+      type: r.type as 'recommendation' | 'pattern' | 'trend' | 'alert',
       title: 'Recomendação de Produtividade',
       description: r.description,
+      severity: r.priority === 'high' ? 'high' : r.priority === 'medium' ? 'medium' : 'low',
+      category: 'productivity',
+      data: { expectedImpact: r.expectedImpact },
+      generatedAt: new Date(),
+      isRead: false,
       priority: r.priority,
-      expectedImpact: r.expectedImpact,
       createdAt: new Date().toISOString(),
     }));
     return {
@@ -128,13 +140,7 @@ export class ProductivityAnalysisService {
       recommendations: insights,
     };
   }
-}
 
-export const productivityAnalysisService = new ProductivityAnalysisService();
-
-import { ProductivityMetric, ProductivityInsight, ProductivitySession } from '../store/productivity';
-
-export class ProductivityAnalysisService {
   /**
    * Analisa tendências de produtividade baseadas em métricas
    */
@@ -284,6 +290,8 @@ export class ProductivityAnalysisService {
       data: { peakHour, productivity: maxProductivity },
       generatedAt: new Date(),
       isRead: false,
+      priority: 'low',
+      createdAt: new Date().toISOString(),
     };
   }
 
@@ -324,6 +332,8 @@ export class ProductivityAnalysisService {
         data: { correlation, focusAvg, taskAvg },
         generatedAt: new Date(),
         isRead: false,
+        priority: 'medium',
+        createdAt: new Date().toISOString(),
       };
     }
 
@@ -371,6 +381,8 @@ export class ProductivityAnalysisService {
         data: { maxStreak, currentStreak },
         generatedAt: new Date(),
         isRead: false,
+        priority: 'low',
+        createdAt: new Date().toISOString(),
       };
     }
 
@@ -437,6 +449,121 @@ export class ProductivityAnalysisService {
   }
 
   /**
+   * Analisa produtividade em um período específico
+   */
+  analyzeProductivity(startDate: Date, endDate: Date) {
+    const store = useProductivity.getState();
+    const allPoints = store.getDataPoints();
+
+    // Filtrar pontos dentro do período
+    const points = allPoints.filter(point => {
+      const pointDate = new Date(point.date);
+      return pointDate >= startDate && pointDate <= endDate;
+    });
+
+    if (points.length === 0) {
+      return {
+        overallScore: 0,
+        trends: {
+          tasksCompleted: [],
+          focusTime: [],
+          habitsCompleted: [],
+          productivityScore: [],
+        },
+        insights: [{ message: 'Nenhum dado disponível para o período selecionado' }],
+      };
+    }
+
+    // Calcular pontuação geral baseada nos pontos mais recentes
+    const recentPoints = points.slice(-7); // Últimos 7 dias
+    const overallScore = recentPoints.length > 0
+      ? recentPoints.reduce((sum, p) => sum + p.productivityScore, 0) / recentPoints.length
+      : 0;
+
+    // Preparar tendências
+    const trends = {
+      tasksCompleted: points.map(p => p.tasksCompleted),
+      focusTime: points.map(p => p.focusMinutes),
+      habitsCompleted: points.map(p => p.habitsScore),
+      productivityScore: points.map(p => p.productivityScore),
+    };
+
+    // Gerar insights baseados na análise
+    const insights = this.generateInsights(points, startDate, endDate);
+
+    return {
+      overallScore: Math.round(overallScore),
+      trends,
+      insights,
+    };
+  }
+
+  /**
+   * Gera insights baseados nos dados de produtividade
+   */
+  private generateInsights(points: ProductivityDataPoint[], startDate: Date, endDate: Date) {
+    const insights: { message: string }[] = [];
+
+    if (points.length === 0) {
+      return [{ message: 'Dados insuficientes para gerar insights' }];
+    }
+
+    // Insight sobre tendência de produtividade
+    const recent = points.slice(-7);
+    const earlier = points.slice(0, -7);
+
+    if (recent.length > 0 && earlier.length > 0) {
+      const recentAvg = recent.reduce((sum, p) => sum + p.productivityScore, 0) / recent.length;
+      const earlierAvg = earlier.reduce((sum, p) => sum + p.productivityScore, 0) / earlier.length;
+      const change = ((recentAvg - earlierAvg) / earlierAvg) * 100;
+
+      if (Math.abs(change) > 10) {
+        const direction = change > 0 ? 'melhorou' : 'diminuiu';
+        insights.push({
+          message: `Sua produtividade ${direction} ${Math.abs(change).toFixed(1)}% no período recente`
+        });
+      }
+    }
+
+    // Insight sobre foco
+    const avgFocus = points.reduce((sum, p) => sum + p.focusMinutes, 0) / points.length;
+    if (avgFocus < 60) {
+      insights.push({
+        message: 'Considere aumentar o tempo de foco diário para melhorar a produtividade'
+      });
+    } else if (avgFocus > 120) {
+      insights.push({
+        message: 'Excelente! Você mantém um bom tempo de foco diariamente'
+      });
+    }
+
+    // Insight sobre tarefas
+    const avgTasks = points.reduce((sum, p) => sum + p.tasksCompleted, 0) / points.length;
+    if (avgTasks < 3) {
+      insights.push({
+        message: 'Tente completar mais tarefas diariamente para aumentar sua produtividade'
+      });
+    }
+
+    // Insight sobre hábitos
+    const avgHabits = points.reduce((sum, p) => sum + p.habitsScore, 0) / points.length;
+    if (avgHabits < 50) {
+      insights.push({
+        message: 'Foque em manter hábitos consistentes para melhorar seus resultados'
+      });
+    }
+
+    // Se não há insights específicos, adicionar um genérico
+    if (insights.length === 0) {
+      insights.push({
+        message: 'Continue mantendo suas rotinas para resultados consistentes'
+      });
+    }
+
+    return insights;
+  }
+
+  /**
    * Calcula estatísticas avançadas de produtividade
    */
   static calculateAdvancedStats(metrics: ProductivityMetric[], sessions: ProductivitySession[]) {
@@ -488,3 +615,5 @@ export class ProductivityAnalysisService {
     return stats;
   }
 }
+
+export const productivityAnalysisService = new ProductivityAnalysisService();

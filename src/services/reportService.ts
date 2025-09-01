@@ -1,45 +1,42 @@
-import { ProductivityReport } from '../store/productivity';
+import { ProductivityReport, ProductivityMetric, ProductivityInsight } from '../store/productivity';
+import { ProductivityAnalysisService } from './productivityAnalysis';
 
 export class ReportService {
+  // Instance methods for export functionality
   toCSV(report: ProductivityReport): string {
     const header = [
       'period',
       'startDate',
       'endDate',
-      'tasksCompleted',
-      'focusMinutes',
-      'eventsCount',
-      'tasksPerDay',
-      'focusMinutesPerDay',
-      'avgProductivityScore',
-      'mostProductiveDay',
+      'totalTasks',
+      'totalFocusTime',
+      'totalHabits',
+      'averageProductivity',
+      'bestDay',
+      'worstDay',
+      'tasksTrend',
+      'focusTrend',
+      'habitsTrend',
+      'productivityTrend',
     ].join(',');
 
     const row = [
-      report.period,
-      report.startDate,
-      report.endDate,
-      report.totals.tasksCompleted,
-      report.totals.focusMinutes,
-      report.totals.eventsCount,
-      report.averages.tasksPerDay.toFixed(2),
-      report.averages.focusMinutesPerDay.toFixed(2),
-      report.averages.productivityScore.toFixed(1),
-      report.mostProductiveDay,
+      report.type,
+      report.period.start.toISOString().split('T')[0],
+      report.period.end.toISOString().split('T')[0],
+      report.summary.totalTasks,
+      report.summary.totalFocusTime,
+      report.summary.totalHabits,
+      report.summary.averageProductivity,
+      report.summary.bestDay.toISOString().split('T')[0],
+      report.summary.worstDay.toISOString().split('T')[0],
+      report.trends.tasksTrend,
+      report.trends.focusTrend,
+      report.trends.habitsTrend,
+      report.trends.productivityTrend,
     ].join(',');
 
-    const trendHeader = ['date', 'tasksCompleted', 'focusMinutes', 'habitsScore', 'productivityScore'].join(',');
-    const trendRows = report.trend.dates
-      .map((d, i) => [
-        d,
-        report.trend.tasksCompleted[i],
-        report.trend.focusMinutes[i],
-        report.trend.habitsScore[i],
-        report.trend.productivityScore[i],
-      ].join(','))
-      .join('\n');
-
-    return [header, row, '', trendHeader, trendRows].join('\n');
+    return [header, row].join('\n');
   }
 
   toJSON(report: ProductivityReport): string {
@@ -75,14 +72,7 @@ export class ReportService {
     const json = this.toJSON(report);
     this.download(filename ?? `productivity-report-${report.period}.json`, json, 'application/json;charset=utf-8;');
   }
-}
 
-export const reportService = new ReportService();
-
-import { ProductivityReport, ProductivityMetric, ProductivityInsight } from '../store/productivity';
-import { ProductivityAnalysisService } from './productivityAnalysis';
-
-export class ReportService {
   /**
    * Gera relatório semanal de produtividade
    */

@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import { 
-  mlOptimizationService, 
+import {
+  mlOptimizationService,
   MLUserPreferences,
   MLOptimizationRequest,
   MLTask,
-  MLEvent 
+  MLEvent
 } from '../services/mlOptimizationService';
+import { productivityAnalysisService } from '../services/productivityAnalysis';
 
 export interface WeeklyPlan {
   id: string;
@@ -739,23 +740,43 @@ export const useAssistant = create<AssistantStore>((set, get) => ({
   },
 
   analyzeProductivity: (days: number) => {
-    // Simular análise de produtividade
-    const score = Math.floor(Math.random() * 40) + 60; // 60-100
-    
-    const trends = {
-      tasks: Array.from({ length: days }, () => Math.floor(Math.random() * 10) + 5),
-      focus: Array.from({ length: days }, () => Math.floor(Math.random() * 120) + 60),
-      habits: Array.from({ length: days }, () => Math.floor(Math.random() * 5) + 3),
-      productivity: Array.from({ length: days }, () => Math.floor(Math.random() * 40) + 60),
-    };
-    
-    const insights = [
-      'Produtividade melhorou 15% esta semana',
-      'Horário de maior foco: 9h-11h',
-      'Hábitos matinais estão consistentes',
-    ];
-    
-    return { score, trends, insights };
+    try {
+      // Use the comprehensive productivityAnalysisService
+      const endDate = new Date();
+      const startDate = new Date(endDate.getTime() - days * 24 * 60 * 60 * 1000);
+
+      const analysis = productivityAnalysisService.analyzeProductivity(startDate, endDate);
+
+      // Transform the analysis result to match the expected interface
+      return {
+        score: analysis.overallScore,
+        trends: {
+          tasks: analysis.trends.tasksCompleted,
+          focus: analysis.trends.focusTime,
+          habits: analysis.trends.habitsCompleted,
+          productivity: analysis.trends.productivityScore,
+        },
+        insights: analysis.insights.map(insight => insight.message),
+      };
+    } catch (error) {
+      console.error('Error analyzing productivity:', error);
+      // Fallback to simulated data if service fails
+      const score = Math.floor(Math.random() * 40) + 60;
+
+      const trends = {
+        tasks: Array.from({ length: days }, () => Math.floor(Math.random() * 10) + 5),
+        focus: Array.from({ length: days }, () => Math.floor(Math.random() * 120) + 60),
+        habits: Array.from({ length: days }, () => Math.floor(Math.random() * 5) + 3),
+        productivity: Array.from({ length: days }, () => Math.floor(Math.random() * 40) + 60),
+      };
+
+      const insights = [
+        'Análise temporariamente indisponível',
+        'Dados serão atualizados em breve',
+      ];
+
+      return { score, trends, insights };
+    }
   },
 
   suggestOptimizations: (planId: string) => {
