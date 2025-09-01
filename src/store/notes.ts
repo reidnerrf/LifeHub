@@ -40,6 +40,11 @@ export interface Notebook {
   description?: string;
   isDefault: boolean;
   createdAt: Date;
+  theme?: {
+    background?: string;
+    textColor?: string;
+    accentColor?: string;
+  };
 }
 
 export interface SearchResult {
@@ -127,6 +132,11 @@ interface NotesStore {
   setSelectedTags: (tags: string[]) => void;
   setSearchQuery: (query: string) => void;
   setIsSearching: (isSearching: boolean) => void;
+
+  // Premium
+  setNotebookTheme: (notebookId: string, theme: NonNullable<Notebook['theme']>) => void;
+  categorizeNote: (noteId: string) => Promise<string[]>;
+  analyzeNoteContent: (noteId: string) => Promise<Record<string, string>>;
 
   // Collaboration
   shareNote: (noteId: string, userId: string, permission: 'view' | 'comment' | 'edit') => void;
@@ -617,6 +627,33 @@ export const useNotes = create<NotesStore>((set, get) => ({
 
   setIsSearching: (isSearching) => {
     set({ isSearching });
+  },
+
+  // Premium
+  setNotebookTheme: (notebookId, theme) => {
+    set((state) => ({
+      notebooks: state.notebooks.map((nb) => (nb.id === notebookId ? { ...nb, theme } : nb)),
+    }));
+  },
+  categorizeNote: async (noteId) => {
+    const note = get().notes.find((n) => n.id === noteId);
+    if (!note) return [];
+    const { notesMLService } = await import('../services/notesMLService');
+    const res = await notesMLService.categorize(note);
+    // Optionally map categories to tags
+    set((state) => ({
+      notes: state.notes.map((n) => (n.id === noteId ? { ...n, tags: Array.from(new Set([...n.tags, ...res.categories])) } : n)),
+    }));
+    return res.categories;
+  },
+  analyzeNoteContent: async (noteId) => {
+    const note = get().notes.find((n) => n.id === noteId);
+    if (!note) return {} as Record<string, string>;
+    const { notesMLService } = await import('../services/notesMLService');
+    const insights = await notesMLService.analyzeContent(note);
+    const map: Record<string, string> = {};
+    insights.forEach((i) => (map[i.key] = i.value));
+    return map;
   },
 
   // Collaboration
