@@ -11,8 +11,10 @@ import {
   Easing
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Notifications from 'expo-notifications';
 import { useTheme } from '../theme/ThemeProvider';
 import { useAssistant, Routine, RoutineActivity } from '../store/assistant';
+import { routineNotificationManager } from '../services/routineNotificationManager';
 
 const { width } = Dimensions.get('window');
 
@@ -35,6 +37,12 @@ export default function RoutinesManager({ visible, onClose }: RoutinesManagerPro
   } = useAssistant();
 
   const [selectedType, setSelectedType] = useState<'all' | 'morning' | 'evening' | 'deep-work' | 'study' | 'custom'>('all');
+  const [notificationPermission, setNotificationPermission] = useState<boolean | null>(null);
+
+  // Animation values
+  const modalOpacity = useRef(new Animated.Value(0)).current;
+  const modalTranslateY = useRef(new Animated.Value(50)).current;
+  const routineCardScales = useRef<{ [key: string]: Animated.Value }>({}).current;
 
   const routineTypes = [
     { key: 'all', label: 'Todas', icon: 'grid' },
@@ -45,11 +53,80 @@ export default function RoutinesManager({ visible, onClose }: RoutinesManagerPro
     { key: 'custom', label: 'Personalizadas', icon: 'settings' },
   ];
 
-  const filteredRoutines = selectedType === 'all' 
-    ? routines 
+  const filteredRoutines = selectedType === 'all'
+    ? routines
     : getRoutinesByType(selectedType as any);
 
   const activeRoutines = getActiveRoutines();
+
+import { routineNotificationManager } from '../services/routineNotificationManager';
+
+  // Check notification permission on mount
+  useEffect(() => {
+    checkNotificationPermission();
+  }, []);
+
+  // Animate modal visibility
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(modalOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(modalTranslateY, {
+          toValue: 0,
+          duration: 300,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(modalOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(modalTranslateY, {
+          toValue: 50,
+          duration: 200,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [visible]);
+
+  const checkNotificationPermission = async () => {
+    try {
+      const { status } = await Notifications.getPermissionsAsync();
+      setNotificationPermission(status === 'granted');
+    } catch (error) {
+      console.error('Failed to check notification permission:', error);
+      setNotificationPermission(false);
+    }
+  };
+
+  const requestNotificationPermission = async () => {
+    try {
+      const { status } = await Notifications.requestPermissionsAsync();
+      setNotificationPermission(status === 'granted');
+      return status === 'granted';
+    } catch (error) {
+      console.error('Failed to request notification permission:', error);
+      return false;
+    }
+  };
+
+  // Initialize animation values for routine cards
+  const getRoutineCardScale = (routineId: string) => {
+    if (!routineCardScales[routineId]) {
+      routineCardScales[routineId] = new Animated.Value(1);
+    }
+    return routineCardScales[routineId];
+  };
 
   const handleExecuteRoutine = async (routine: Routine) => {
     Alert.alert(
@@ -72,13 +149,27 @@ export default function RoutinesManager({ visible, onClose }: RoutinesManagerPro
     );
   };
 
-  const handleToggleRoutine = (routine: Routine) => {
-    if (routine.isActive) {
-      deactivateRoutine(routine.id);
-      Alert.alert('Rotina Desativada', `${routine.name} foi desativada`);
-    } else {
-      activateRoutine(routine.id);
-      Alert.alert('Rotina Ativada', `${routine.name} foi ativada`);
+  const handleToggleRoutine = async (routine: Routine) => {
+    try {
+      if (routine.isActive) {
+        // Desativar rotina
+        deactivateRoutine(routine.id);
+        await routineNotificationManager.cancelRoutineNotifications(routine.id);
+        Alert.alert('Rotina Desativada', `${routine.name} foi desativada e lembretes cancelados`);
+      } else {
+        // Ativar rotina
+        const permissionGranted = await requestNotificationPermission();
+        if (!permissionGranted) {
+          Alert.alert('Permissão Negada', 'Permissão para notificações é necessária para ativar a rotina.');
+          return;
+        }
+        activateRoutine(routine.id);
+        await routineNotificationManager.scheduleRoutineNotifications(routine);
+        Alert.alert('Rotina Ativada', `${routine.name} foi ativada e lembretes agendados`);
+      }
+    } catch (error) {
+      console.error('Erro ao gerenciar notificações da rotina:', error);
+      Alert.alert('Erro', 'Falha ao gerenciar notificações da rotina');
     }
   };
 
@@ -234,8 +325,24 @@ export default function RoutinesManager({ visible, onClose }: RoutinesManagerPro
   if (!visible) return null;
 
   return (
-    <View style={[styles.overlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-      <View style={[styles.modal, { backgroundColor: t.card }]}>
+    <Animated.View
+      style={[
+        styles.overlay,
+        {
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          opacity: modalOpacity,
+        }
+      ]}
+    >
+      <Animated.View
+        style={[
+          styles.modal,
+          {
+            backgroundColor: t.card,
+            transform: [{ translateY: modalTranslateY }],
+          }
+        ]}
+      >
         {/* Header */}
         <View style={styles.header}>
           <Text style={[styles.title, { color: t.text }]}>Gerenciar Rotinas</Text>
@@ -243,6 +350,29 @@ export default function RoutinesManager({ visible, onClose }: RoutinesManagerPro
             <Ionicons name="close" size={24} color={t.text} />
           </TouchableOpacity>
         </View>
+
+        {/* Notification Permission Banner */}
+        {notificationPermission === false && (
+          <View style={[styles.permissionBanner, { backgroundColor: t.warning + '20' }]}>
+            <Ionicons name="notifications-off" size={20} color={t.warning} />
+            <View style={styles.permissionText}>
+              <Text style={[styles.permissionTitle, { color: t.warning }]}>
+                Permissões de Notificação
+              </Text>
+              <Text style={[styles.permissionDescription, { color: t.textLight }]}>
+                Permita notificações para receber lembretes das suas rotinas
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.permissionButton, { backgroundColor: t.warning }]}
+              onPress={requestNotificationPermission}
+            >
+              <Text style={[styles.permissionButtonText, { color: '#fff' }]}>
+                Permitir
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Filtros por Tipo */}
         <View style={styles.filtersSection}>
@@ -557,6 +687,35 @@ const styles = StyleSheet.create({
   },
   addButtonText: {
     fontSize: 16,
+    fontWeight: '600',
+  },
+  permissionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 20,
+    gap: 12,
+  },
+  permissionText: {
+    flex: 1,
+  },
+  permissionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  permissionDescription: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  permissionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  permissionButtonText: {
+    fontSize: 12,
     fontWeight: '600',
   },
 });

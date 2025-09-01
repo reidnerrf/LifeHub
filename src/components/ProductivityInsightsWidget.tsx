@@ -1,11 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeProvider';
 import { useAssistant } from '../store/assistant';
 
 interface ProductivityInsightsWidgetProps {
   onPress?: () => void;
+  config?: ProductivityInsightsConfig;
+}
+
+interface ProductivityInsightsConfig {
+  timePeriod: number; // days
+  showAnimations: boolean;
+  refreshInterval: number; // minutes
+  insightTypes: ('productivity' | 'health' | 'learning' | 'social')[];
 }
 
 interface InsightItem {
@@ -18,23 +26,111 @@ interface InsightItem {
   color: string;
 }
 
-export default function ProductivityInsightsWidget({ onPress }: ProductivityInsightsWidgetProps) {
+export default function ProductivityInsightsWidget({ onPress, config }: ProductivityInsightsWidgetProps) {
   const t = useTheme();
   const { analyzeProductivity } = useAssistant();
   const [insights, setInsights] = useState<InsightItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Default configuration
+  const defaultConfig: ProductivityInsightsConfig = {
+    timePeriod: 7,
+    showAnimations: true,
+    refreshInterval: 30,
+    insightTypes: ['productivity', 'health', 'learning', 'social'],
+  };
+
+  const widgetConfig = config || defaultConfig;
+
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const spinAnim = useRef(new Animated.Value(0)).current;
+  const itemAnimations = useRef<{ [key: string]: Animated.Value }>({}).current;
+
   useEffect(() => {
     loadInsights();
   }, []);
 
+  // Auto-refresh based on configuration
+  useEffect(() => {
+    if (widgetConfig.refreshInterval > 0) {
+      const interval = setInterval(() => {
+        loadInsights();
+      }, widgetConfig.refreshInterval * 60 * 1000); // Convert minutes to milliseconds
+
+      return () => clearInterval(interval);
+    }
+  }, [widgetConfig.refreshInterval]);
+
+  useEffect(() => {
+    if (!isLoading && insights.length > 0) {
+      if (widgetConfig.showAnimations) {
+        // Animate widget entrance
+        Animated.parallel([
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scaleAnim, {
+            toValue: 1,
+            duration: 500,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ]).start();
+
+        // Animate items sequentially
+        insights.forEach((insight, index) => {
+          if (!itemAnimations[insight.id]) {
+            itemAnimations[insight.id] = new Animated.Value(0);
+          }
+          Animated.timing(itemAnimations[insight.id], {
+            toValue: 1,
+            duration: 300,
+            delay: index * 100,
+            useNativeDriver: true,
+          }).start();
+        });
+      } else {
+        // Set animations to final state without animation
+        fadeAnim.setValue(1);
+        scaleAnim.setValue(1);
+        insights.forEach((insight) => {
+          if (!itemAnimations[insight.id]) {
+            itemAnimations[insight.id] = new Animated.Value(1);
+          } else {
+            itemAnimations[insight.id].setValue(1);
+          }
+        });
+      }
+    }
+  }, [isLoading, insights, widgetConfig.showAnimations]);
+
+  // Loading spinner animation
+  useEffect(() => {
+    if (isLoading) {
+      const spinAnimation = Animated.loop(
+        Animated.timing(spinAnim, {
+          toValue: 1,
+          duration: 1000,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      );
+      spinAnimation.start();
+      return () => spinAnimation.stop();
+    }
+  }, [isLoading]);
+
   const loadInsights = async () => {
     try {
       setIsLoading(true);
-      const analysis = analyzeProductivity(7); // Last 7 days
+      const analysis = analyzeProductivity(widgetConfig.timePeriod);
 
       // Transform analysis data into insights
-      const productivityInsights: InsightItem[] = [
+      const allInsights: InsightItem[] = [
         {
           id: 'productivity-score',
           type: 'productivity',
@@ -73,7 +169,12 @@ export default function ProductivityInsightsWidget({ onPress }: ProductivityInsi
         },
       ];
 
-      setInsights(productivityInsights);
+      // Filter insights based on configuration
+      const filteredInsights = allInsights.filter(insight =>
+        widgetConfig.insightTypes.includes(insight.type)
+      );
+
+      setInsights(filteredInsights);
     } catch (error) {
       console.error('Failed to load productivity insights:', error);
       // Fallback insights
@@ -110,6 +211,11 @@ export default function ProductivityInsightsWidget({ onPress }: ProductivityInsi
   };
 
   if (isLoading) {
+    const spin = spinAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['0deg', '360deg'],
+    });
+
     return (
       <View style={[styles.container, { backgroundColor: t.card }]}>
         <View style={styles.header}>
@@ -119,7 +225,9 @@ export default function ProductivityInsightsWidget({ onPress }: ProductivityInsi
           <Text style={[styles.title, { color: t.text }]}>Insights de Produtividade</Text>
         </View>
         <View style={styles.loadingState}>
-          <Ionicons name="analytics" size={32} color={t.textLight} />
+          <Animated.View style={{ transform: [{ rotate: spin }] }}>
+            <Ionicons name="analytics" size={32} color={t.primary} />
+          </Animated.View>
           <Text style={[styles.loadingText, { color: t.textLight }]}>
             Analisando dados...
           </Text>
@@ -129,68 +237,123 @@ export default function ProductivityInsightsWidget({ onPress }: ProductivityInsi
   }
 
   return (
-    <TouchableOpacity
-      style={[styles.container, { backgroundColor: t.card }]}
-      onPress={onPress}
-      activeOpacity={0.7}
+    <Animated.View
+      style={[
+        styles.container,
+        {
+          backgroundColor: t.card,
+          opacity: fadeAnim,
+          transform: [{ scale: scaleAnim }],
+        }
+      ]}
     >
-      <View style={styles.header}>
-        <View style={styles.iconContainer}>
-          <Ionicons name="analytics" size={20} color={t.primary} />
+      <TouchableOpacity
+        style={styles.touchableContainer}
+        onPress={onPress}
+        activeOpacity={0.7}
+      >
+        <View style={styles.header}>
+          <View style={styles.iconContainer}>
+            <Ionicons name="analytics" size={20} color={t.primary} />
+          </View>
+          <Text style={[styles.title, { color: t.text }]}>Insights de Produtividade</Text>
+          <Text style={[styles.count, { color: t.primary }]}>
+            {insights.length}
+          </Text>
         </View>
-        <Text style={[styles.title, { color: t.text }]}>Insights de Produtividade</Text>
-        <Text style={[styles.count, { color: t.primary }]}>
-          {insights.length}
-        </Text>
-      </View>
 
-      {insights.length > 0 ? (
-        <ScrollView style={styles.insightsList} showsVerticalScrollIndicator={false}>
-          {insights.map((insight) => (
-            <View key={insight.id} style={styles.insightItem}>
-              <View style={styles.insightHeader}>
-                <View style={[styles.insightIcon, { backgroundColor: insight.color + '20' }]}>
-                  <Ionicons name={insight.icon as any} size={16} color={insight.color} />
-                </View>
-                <View style={styles.insightContent}>
-                  <Text style={[styles.insightTitle, { color: t.text }]}>
-                    {insight.title}
-                  </Text>
-                  <View style={styles.insightMeta}>
-                    <Text style={[styles.insightValue, { color: insight.color }]}>
-                      {insight.value}
-                    </Text>
-                    <View style={styles.trendContainer}>
-                      <Ionicons
-                        name={getTrendIcon(insight.trend) as any}
-                        size={12}
-                        color={getTrendColor(insight.trend)}
-                      />
+        {insights.length > 0 ? (
+          <ScrollView style={styles.insightsList} showsVerticalScrollIndicator={false}>
+            {insights.map((insight, index) => {
+              const itemAnim = itemAnimations[insight.id] || new Animated.Value(1);
+              const translateY = itemAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [20, 0],
+              });
+              const itemOpacity = itemAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 1],
+              });
+
+              return (
+                <Animated.View
+                  key={insight.id}
+                  style={[
+                    styles.insightItem,
+                    {
+                      opacity: itemOpacity,
+                      transform: [{ translateY }],
+                    }
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={styles.insightTouchable}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      if (widgetConfig.showAnimations) {
+                        // Add micro-interaction feedback
+                        const scaleAnim = new Animated.Value(1);
+                        Animated.sequence([
+                          Animated.timing(scaleAnim, {
+                            toValue: 0.98,
+                            duration: 100,
+                            useNativeDriver: true,
+                          }),
+                          Animated.timing(scaleAnim, {
+                            toValue: 1,
+                            duration: 100,
+                            useNativeDriver: true,
+                          }),
+                        ]).start();
+                      }
+                    }}
+                  >
+                    <View style={styles.insightHeader}>
+                      <View style={[styles.insightIcon, { backgroundColor: insight.color + '20' }]}>
+                        <Ionicons name={insight.icon as any} size={16} color={insight.color} />
+                      </View>
+                      <View style={styles.insightContent}>
+                        <Text style={[styles.insightTitle, { color: t.text }]}>
+                          {insight.title}
+                        </Text>
+                        <View style={styles.insightMeta}>
+                          <Text style={[styles.insightValue, { color: insight.color }]}>
+                            {insight.value}
+                          </Text>
+                          <View style={styles.trendContainer}>
+                            <Ionicons
+                              name={getTrendIcon(insight.trend) as any}
+                              size={12}
+                              color={getTrendColor(insight.trend)}
+                            />
+                          </View>
+                        </View>
+                      </View>
                     </View>
-                  </View>
-                </View>
-              </View>
-            </View>
-          ))}
-        </ScrollView>
-      ) : (
-        <View style={styles.emptyState}>
-          <Ionicons name="analytics" size={32} color={t.textLight} />
-          <Text style={[styles.emptyText, { color: t.textLight }]}>
-            Dados insuficientes
-          </Text>
-          <Text style={[styles.emptySubtext, { color: t.textLight }]}>
-            Complete mais atividades para ver insights
+                  </TouchableOpacity>
+                </Animated.View>
+              );
+            })}
+          </ScrollView>
+        ) : (
+          <View style={styles.emptyState}>
+            <Ionicons name="analytics" size={32} color={t.textLight} />
+            <Text style={[styles.emptyText, { color: t.textLight }]}>
+              Dados insuficientes
+            </Text>
+            <Text style={[styles.emptySubtext, { color: t.textLight }]}>
+              Complete mais atividades para ver insights
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.footer}>
+          <Text style={[styles.footerText, { color: t.textLight }]}>
+            Baseado nos últimos {widgetConfig.timePeriod} dias
           </Text>
         </View>
-      )}
-
-      <View style={styles.footer}>
-        <Text style={[styles.footerText, { color: t.textLight }]}>
-          Baseado nos últimos 7 dias
-        </Text>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </Animated.View>
   );
 }
 
@@ -204,6 +367,9 @@ const styles = StyleSheet.create({
     elevation: 4,
     marginBottom: 16,
     maxHeight: 280,
+  },
+  touchableContainer: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -244,6 +410,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  insightTouchable: {
+    flex: 1,
   },
   insightHeader: {
     flexDirection: 'row',

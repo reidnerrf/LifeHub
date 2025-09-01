@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeProvider';
-import { useHabits, WellnessCheckin } from '../store/habits';
+import { useHabits } from '../store/habits';
 
 interface WellnessCheckinProps {
   visible: boolean;

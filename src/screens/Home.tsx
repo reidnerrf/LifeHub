@@ -20,6 +20,9 @@ import { useGamification } from '../store/gamification';
 import SwipeableDashboard from '../components/SwipeableDashboard';
 import MotivationalQuote from '../components/MotivationalQuote';
 import InteractiveProgressWidget from '../components/InteractiveProgressWidget';
+import RoutineSummaryWidget from '../components/RoutineSummaryWidget';
+import UpcomingRemindersWidget from '../components/UpcomingRemindersWidget';
+import ProductivityInsightsWidget from '../components/ProductivityInsightsWidget';
 
 const { width } = Dimensions.get('window');
 
@@ -318,6 +321,22 @@ export default function Home() {
 
       {/* Motivational Quote */}
       <MotivationalQuote />
+
+      {/* Routine Summary Widget */}
+      <RoutineSummaryWidget />
+
+      {/* Upcoming Reminders Widget */}
+      <UpcomingRemindersWidget />
+
+      {/* Productivity Insights Widget */}
+      <ProductivityInsightsWidget
+        config={{
+          timePeriod: 7,
+          showAnimations: true,
+          refreshInterval: 30,
+          insightTypes: ['productivity', 'health', 'learning', 'social'],
+        }}
+      />
 
       {/* Timeline */}
       <View style={styles.timelineContainer}>

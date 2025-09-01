@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Bell, X, CheckCircle, AlertTriangle, Info, Calendar, Target, DollarSign, Brain } from 'lucide-react';
-import { Card } from './ui/card';
-import { Badge } from './ui/badge';
-import { Button } from './ui/button';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, Dimensions, Alert } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../theme/ThemeProvider';
+import { Animated, Easing, TouchableOpacity } from 'react-native';
+
+const { width } = Dimensions.get('window');
 
 interface Notification {
   id: string;
@@ -21,7 +23,8 @@ interface NotificationSystemProps {
   onClose: () => void;
 }
 
-const NotificationSystem: React.FC<NotificationSystemProps> = ({ isOpen, onClose }) => {
+export default function NotificationSystem({ isOpen, onClose }: NotificationSystemProps) {
+  const t = useTheme();
   const [notifications, setNotifications] = useState<Notification[]>([
     {
       id: '1',
@@ -33,8 +36,8 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({ isOpen, onClose
       read: false,
       priority: 'high',
       actions: [
-        { label: 'Ver Tarefas', action: () => console.log('Open tasks') },
-        { label: 'Adiar', action: () => console.log('Snooze') }
+        { label: 'Ver Tarefas', action: () => Alert.alert('Ver Tarefas') },
+        { label: 'Adiar', action: () => Alert.alert('Adiar') }
       ]
     },
     {
@@ -47,7 +50,7 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({ isOpen, onClose
       read: false,
       priority: 'medium',
       actions: [
-        { label: 'Compartilhar', action: () => console.log('Share achievement') }
+        { label: 'Compartilhar', action: () => Alert.alert('Compartilhar') }
       ]
     },
     {
@@ -60,8 +63,8 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({ isOpen, onClose
       read: false,
       priority: 'high',
       actions: [
-        { label: 'Ver Detalhes', action: () => console.log('View finances') },
-        { label: 'Ajustar Orçamento', action: () => console.log('Adjust budget') }
+        { label: 'Ver Detalhes', action: () => Alert.alert('Ver Detalhes') },
+        { label: 'Ajustar Orçamento', action: () => Alert.alert('Ajustar Orçamento') }
       ]
     },
     {
@@ -74,7 +77,7 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({ isOpen, onClose
       read: true,
       priority: 'medium',
       actions: [
-        { label: 'Iniciar Foco', action: () => console.log('Start focus') }
+        { label: 'Iniciar Foco', action: () => Alert.alert('Iniciar Foco') }
       ]
     },
     {
@@ -89,40 +92,88 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({ isOpen, onClose
     }
   ]);
 
+  // Animation values
+  const modalOpacity = useRef(new Animated.Value(0)).current;
+  const modalTranslateX = useRef(new Animated.Value(width)).current;
+  const notificationScales = useRef<{ [key: string]: Animated.Value }>({}).current;
+
+  // Animate modal visibility
+  useEffect(() => {
+    if (isOpen) {
+      Animated.parallel([
+        Animated.timing(modalOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(modalTranslateX, {
+          toValue: 0,
+          duration: 300,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(modalOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(modalTranslateX, {
+          toValue: width,
+          duration: 200,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [isOpen]);
+
   const getIcon = (type: string) => {
     switch (type) {
-      case 'success': return <CheckCircle size={16} className="text-[var(--app-green)]" />;
-      case 'warning': return <AlertTriangle size={16} className="text-[var(--app-yellow)]" />;
-      case 'info': return <Info size={16} className="text-[var(--app-blue)]" />;
-      case 'reminder': return <Bell size={16} className="text-[var(--app-purple)]" />;
-      default: return <Info size={16} className="text-[var(--app-gray)]" />;
+      case 'success': return 'checkmark-circle';
+      case 'warning': return 'warning';
+      case 'info': return 'information-circle';
+      case 'reminder': return 'notifications';
+      default: return 'information-circle';
+    }
+  };
+
+  const getIconColor = (type: string) => {
+    switch (type) {
+      case 'success': return t.success;
+      case 'warning': return t.warning;
+      case 'info': return t.primary;
+      case 'reminder': return t.secondary;
+      default: return t.textLight;
     }
   };
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
-      case 'task': return <CheckCircle size={14} />;
-      case 'habit': return <Target size={14} />;
-      case 'finance': return <DollarSign size={14} />;
-      case 'focus': return <Brain size={14} />;
-      default: return <Bell size={14} />;
+      case 'task': return 'checkmark-circle-outline';
+      case 'habit': return 'trophy-outline';
+      case 'finance': return 'cash-outline';
+      case 'focus': return 'bulb-outline';
+      default: return 'notifications-outline';
     }
   };
 
   const getCategoryColor = (category: string) => {
     switch (category) {
-      case 'task': return 'var(--app-blue)';
-      case 'habit': return 'var(--app-green)';
-      case 'finance': return 'var(--app-yellow)';
-      case 'focus': return 'var(--app-purple)';
-      default: return 'var(--app-gray)';
+      case 'task': return t.primary;
+      case 'habit': return t.success;
+      case 'finance': return t.warning;
+      case 'focus': return t.secondary;
+      default: return t.textLight;
     }
   };
 
   const formatTime = (date: Date) => {
     const now = new Date();
     const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
-    
+
     if (diffInMinutes < 1) return 'Agora mesmo';
     if (diffInMinutes < 60) return `${diffInMinutes}m atrás`;
     if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h atrás`;
@@ -141,6 +192,33 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({ isOpen, onClose
     setNotifications(prev => prev.filter(notif => notif.id !== id));
   };
 
+  const getNotificationScale = (id: string) => {
+    if (!notificationScales[id]) {
+      notificationScales[id] = new Animated.Value(1);
+    }
+    return notificationScales[id];
+  };
+
+  const handleNotificationPress = (notification: Notification) => {
+    const scale = getNotificationScale(notification.id);
+    Animated.sequence([
+      Animated.timing(scale, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scale, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    if (!notification.read) {
+      markAsRead(notification.id);
+    }
+  };
+
   const unreadCount = notifications.filter(n => !n.read).length;
   const sortedNotifications = [...notifications].sort((a, b) => {
     if (a.read !== b.read) return a.read ? 1 : -1;
@@ -150,162 +228,371 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({ isOpen, onClose
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 animate-fade-in" onClick={onClose}>
-      <div 
-        className="fixed top-0 right-0 w-full max-w-md h-full bg-[var(--app-card)] shadow-xl animate-slide-down"
-        onClick={e => e.stopPropagation()}
+    <Animated.View
+      style={[
+        styles.overlay,
+        {
+          opacity: modalOpacity,
+        }
+      ]}
+    >
+      <TouchableOpacity
+        style={styles.overlayTouchable}
+        activeOpacity={1}
+        onPress={onClose}
       >
-        {/* Header */}
-        <div className="p-6 border-b border-[var(--app-light-gray)]">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-[var(--app-text)]">Notificações</h2>
+        <Animated.View
+          style={[
+            styles.modal,
+            {
+              backgroundColor: t.card,
+              transform: [{ translateX: modalTranslateX }],
+            }
+          ]}
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.headerContent}>
+              <Text style={[styles.title, { color: t.text }]}>Notificações</Text>
               {unreadCount > 0 && (
-                <p className="text-sm text-[var(--app-text-light)]">{unreadCount} não lidas</p>
+                <Text style={[styles.unreadCount, { color: t.textLight }]}>
+                  {unreadCount} não lidas
+                </Text>
               )}
-            </div>
-            <button
-              onClick={onClose}
-              className="p-2 rounded-xl text-[var(--app-gray)] hover:text-[var(--app-text)] hover:bg-[var(--app-light-gray)] transition-colors"
+            </View>
+            <TouchableOpacity
+              onPress={onClose}
+              style={[styles.closeButton, { backgroundColor: t.background }]}
             >
-              <X size={20} />
-            </button>
-          </div>
-        </div>
+              <Ionicons name="close" size={20} color={t.text} />
+            </TouchableOpacity>
+          </View>
 
-        {/* Notifications List */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
-          {sortedNotifications.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64">
-              <Bell size={48} className="text-[var(--app-gray)] mb-4" />
-              <h3 className="font-medium text-[var(--app-text)] mb-2">Nenhuma notificação</h3>
-              <p className="text-sm text-[var(--app-text-light)] text-center">
-                Você está em dia com tudo!
-              </p>
-            </div>
-          ) : (
-            <div className="p-4 space-y-3">
-              {sortedNotifications.map((notification) => (
-                <Card 
-                  key={notification.id}
-                  className={`p-4 border-0 shadow-sm transition-all hover:shadow-md cursor-pointer ${
-                    notification.read 
-                      ? 'bg-[var(--app-light-gray)] opacity-75' 
-                      : 'bg-[var(--app-card)]'
-                  }`}
-                  onClick={() => markAsRead(notification.id)}
-                >
-                  <div className="flex items-start space-x-3">
-                    <div className="flex-shrink-0 mt-1">
-                      {getIcon(notification.type)}
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <h4 className="font-medium text-[var(--app-text)] truncate">
-                          {notification.title}
-                        </h4>
-                        <div 
-                          className="w-4 h-4 rounded-full flex items-center justify-center"
-                          style={{ backgroundColor: `${getCategoryColor(notification.category)}15` }}
-                        >
-                          <div style={{ color: getCategoryColor(notification.category) }}>
-                            {getCategoryIcon(notification.category)}
-                          </div>
-                        </div>
-                        {!notification.read && (
-                          <div className="w-2 h-2 bg-[var(--app-blue)] rounded-full flex-shrink-0" />
-                        )}
-                      </div>
-                      
-                      <p className="text-sm text-[var(--app-text-light)] mb-3 line-clamp-2">
-                        {notification.message}
-                      </p>
-                      
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-[var(--app-text-light)]">
-                          {formatTime(notification.timestamp)}
-                        </span>
-                        <Badge 
-                          variant="secondary"
-                          className={`text-xs px-2 py-1 ${
-                            notification.priority === 'high' 
-                              ? 'bg-[var(--app-red)]15 text-[var(--app-red)]'
-                              : notification.priority === 'medium'
-                              ? 'bg-[var(--app-yellow)]15 text-[var(--app-yellow)]'
-                              : 'bg-[var(--app-gray)]15 text-[var(--app-gray)]'
-                          }`}
-                        >
-                          {notification.priority === 'high' ? 'Alta' : 
-                           notification.priority === 'medium' ? 'Média' : 'Baixa'}
-                        </Badge>
-                      </div>
-                      
-                      {notification.actions && notification.actions.length > 0 && (
-                        <div className="flex space-x-2 mt-3">
-                          {notification.actions.map((action, index) => (
-                            <Button
-                              key={index}
-                              size="sm"
-                              variant="outline"
-                              className="text-xs h-7 px-3"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                action.action();
-                              }}
+          {/* Notifications List */}
+          <ScrollView style={styles.notificationsList} showsVerticalScrollIndicator={false}>
+            {sortedNotifications.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="notifications-off-outline" size={64} color={t.textLight} />
+                <Text style={[styles.emptyTitle, { color: t.text }]}>Nenhuma notificação</Text>
+                <Text style={[styles.emptyMessage, { color: t.textLight }]}>
+                  Você está em dia com tudo!
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.notificationsContainer}>
+                {sortedNotifications.map((notification) => (
+                  <Animated.View
+                    key={notification.id}
+                    style={[
+                      styles.notificationCard,
+                      {
+                        backgroundColor: notification.read ? t.background : t.card,
+                        transform: [{ scale: getNotificationScale(notification.id) }],
+                      }
+                    ]}
+                  >
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      onPress={() => handleNotificationPress(notification)}
+                      style={styles.notificationTouchable}
+                    >
+                      <View style={styles.notificationHeader}>
+                        <View style={styles.iconContainer}>
+                          <Ionicons
+                            name={getIcon(notification.type) as any}
+                            size={20}
+                            color={getIconColor(notification.type)}
+                          />
+                        </View>
+                        <View style={styles.notificationContent}>
+                          <View style={styles.titleRow}>
+                            <Text
+                              style={[styles.notificationTitle, { color: t.text }]}
+                              numberOfLines={1}
                             >
-                              {action.label}
-                            </Button>
-                          ))}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-xs h-7 px-3 text-[var(--app-gray)]"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeNotification(notification.id);
-                            }}
-                          >
-                            Dispensar
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
+                              {notification.title}
+                            </Text>
+                            <View style={[styles.categoryBadge, { backgroundColor: getCategoryColor(notification.category) + '20' }]}>
+                              <Ionicons
+                                name={getCategoryIcon(notification.category) as any}
+                                size={12}
+                                color={getCategoryColor(notification.category)}
+                              />
+                            </View>
+                            {!notification.read && (
+                              <View style={[styles.unreadDot, { backgroundColor: t.primary }]} />
+                            )}
+                          </View>
 
-        {/* Footer Actions */}
-        <div className="p-4 border-t border-[var(--app-light-gray)]">
-          <div className="flex space-x-3">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => {
+                          <Text
+                            style={[styles.notificationMessage, { color: t.textLight }]}
+                            numberOfLines={2}
+                          >
+                            {notification.message}
+                          </Text>
+
+                          <View style={styles.notificationFooter}>
+                            <Text style={[styles.timestamp, { color: t.textLight }]}>
+                              {formatTime(notification.timestamp)}
+                            </Text>
+                            <View style={[
+                              styles.priorityBadge,
+                              {
+                                backgroundColor:
+                                  notification.priority === 'high' ? t.error + '20' :
+                                  notification.priority === 'medium' ? t.warning + '20' :
+                                  t.textLight + '20'
+                              }
+                            ]}>
+                              <Text style={[
+                                styles.priorityText,
+                                {
+                                  color:
+                                    notification.priority === 'high' ? t.error :
+                                    notification.priority === 'medium' ? t.warning :
+                                    t.textLight
+                                }
+                              ]}>
+                                {notification.priority === 'high' ? 'Alta' :
+                                 notification.priority === 'medium' ? 'Média' : 'Baixa'}
+                              </Text>
+                            </View>
+                          </View>
+
+                          {notification.actions && notification.actions.length > 0 && (
+                            <View style={styles.actionsContainer}>
+                              {notification.actions.map((action, index) => (
+                                <TouchableOpacity
+                                  key={index}
+                                  style={[styles.actionButton, { backgroundColor: t.primary + '20' }]}
+                                  onPress={() => action.action()}
+                                >
+                                  <Text style={[styles.actionText, { color: t.primary }]}>
+                                    {action.label}
+                                  </Text>
+                                </TouchableOpacity>
+                              ))}
+                              <TouchableOpacity
+                                style={[styles.actionButton, { backgroundColor: t.textLight + '20' }]}
+                                onPress={() => removeNotification(notification.id)}
+                              >
+                                <Text style={[styles.actionText, { color: t.textLight }]}>
+                                  Dispensar
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  </Animated.View>
+                ))}
+              </View>
+            )}
+          </ScrollView>
+
+          {/* Footer Actions */}
+          <View style={[styles.footer, { borderTopColor: t.background }]}>
+            <TouchableOpacity
+              style={[styles.footerButton, { backgroundColor: t.primary + '20' }]}
+              onPress={() => {
                 setNotifications(prev => prev.map(n => ({ ...n, read: true })));
               }}
             >
-              Marcar Todas como Lidas
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex-1 text-[var(--app-gray)]"
-              onClick={() => {
+              <Text style={[styles.footerButtonText, { color: t.primary }]}>
+                Marcar Todas como Lidas
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.footerButton, { backgroundColor: t.textLight + '20' }]}
+              onPress={() => {
                 setNotifications([]);
               }}
             >
-              Limpar Todas
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
+              <Text style={[styles.footerButtonText, { color: t.textLight }]}>
+                Limpar Todas
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </TouchableOpacity>
+    </Animated.View>
   );
-};
+}
 
-export default NotificationSystem;
+const styles = StyleSheet.create({
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  overlayTouchable: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modal: {
+    width: width - 32,
+    maxHeight: '90%',
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 10,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+  },
+  headerContent: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  unreadCount: {
+    fontSize: 14,
+    marginTop: 4,
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notificationsList: {
+    flex: 1,
+    maxHeight: 400,
+  },
+  notificationsContainer: {
+    padding: 16,
+  },
+  notificationCard: {
+    borderRadius: 12,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  notificationTouchable: {
+    padding: 16,
+  },
+  notificationHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  iconContainer: {
+    marginRight: 12,
+    marginTop: 2,
+  },
+  notificationContent: {
+    flex: 1,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  notificationTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    flex: 1,
+  },
+  categoryBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  notificationMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  notificationFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  timestamp: {
+    fontSize: 12,
+  },
+  priorityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  priorityText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  actionsContainer: {
+    flexDirection: 'row',
+    marginTop: 12,
+    gap: 8,
+  },
+  actionButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  actionText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyMessage: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  footer: {
+    flexDirection: 'row',
+    padding: 16,
+    borderTopWidth: 1,
+    gap: 12,
+  },
+  footerButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  footerButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+});

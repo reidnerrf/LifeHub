@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { notificationService } from '../services/notificationService';
+import { gamificationNotifications } from '../services/gamificationNotifications';
 
 export interface UserProfile {
   id: string;
@@ -120,7 +121,7 @@ interface GamificationStore {
   quests: Quest[];
   streaks: Streak[];
   leaderboard: LeaderboardEntry[];
-  
+
   // Estado atual
   isLoading: boolean;
   showAchievementModal: boolean;
@@ -128,28 +129,36 @@ interface GamificationStore {
   showLeaderboardModal: boolean;
   selectedAchievement: Achievement | null;
   selectedQuest: Quest | null;
-  
+  rewardAnimationVisible: boolean;
+  rewardAnimationType: 'achievement' | 'medal' | 'level_up' | 'streak' | 'quest' | null;
+  rewardAnimationTitle: string;
+  rewardAnimationDescription: string;
+  rewardAnimationPoints?: number;
+  rewardAnimationExperience?: number;
+  rewardAnimationIcon?: string;
+  rewardAnimationColor?: string;
+
   // Ações para Perfil do Usuário
   updateUserProfile: (updates: Partial<UserProfile>) => void;
   addExperience: (amount: number) => void;
   addPoints: (amount: number) => void;
   updateStreak: (type: Streak['type'], increment: boolean) => void;
   getGamificationStats: () => GamificationStats;
-  
+
   // Ações para Conquistas
   unlockAchievement: (achievementId: string) => void;
   updateAchievementProgress: (achievementId: string, progress: number) => void;
   getUnlockedAchievements: () => Achievement[];
   getLockedAchievements: () => Achievement[];
   getAchievementsByCategory: (category: Achievement['category']) => Achievement[];
-  
+
   // Ações para Medalhas
   unlockMedal: (medalId: string) => void;
   updateMedalProgress: (medalId: string, progress: number) => void;
   getUnlockedMedals: () => Medal[];
   getLockedMedals: () => Medal[];
   getMedalsByRarity: (rarity: Medal['rarity']) => Medal[];
-  
+
   // Ações para Quests
   addQuest: (quest: Omit<Quest, 'id' | 'createdAt'>) => void;
   updateQuest: (questId: string, updates: Partial<Quest>) => void;
@@ -158,16 +167,16 @@ interface GamificationStore {
   getActiveQuests: () => Quest[];
   getCompletedQuests: () => Quest[];
   getQuestsByCategory: (category: Quest['category']) => Quest[];
-  
+
   // Ações para Streaks
   getStreakByType: (type: Streak['type']) => Streak | null;
   getAllStreaks: () => Streak[];
-  
+
   // Ações para Leaderboard
   updateLeaderboard: () => void;
   getUserRank: () => number;
   getTopUsers: (limit: number) => LeaderboardEntry[];
-  
+
   // Configurações
   setShowAchievementModal: (show: boolean) => void;
   setShowQuestModal: (show: boolean) => void;
@@ -175,6 +184,16 @@ interface GamificationStore {
   setSelectedAchievement: (achievement: Achievement | null) => void;
   setSelectedQuest: (quest: Quest | null) => void;
   setIsLoading: (loading: boolean) => void;
+  showRewardAnimation: (
+    type: 'achievement' | 'medal' | 'level_up' | 'streak' | 'quest',
+    title: string,
+    description: string,
+    points?: number,
+    experience?: number,
+    icon?: string,
+    color?: string
+  ) => void;
+  hideRewardAnimation: () => void;
 }
 
 export const useGamification = create<GamificationStore>((set, get) => ({
@@ -511,6 +530,14 @@ export const useGamification = create<GamificationStore>((set, get) => ({
   showLeaderboardModal: false,
   selectedAchievement: null,
   selectedQuest: null,
+  rewardAnimationVisible: false,
+  rewardAnimationType: null,
+  rewardAnimationTitle: '',
+  rewardAnimationDescription: '',
+  rewardAnimationPoints: undefined,
+  rewardAnimationExperience: undefined,
+  rewardAnimationIcon: undefined,
+  rewardAnimationColor: undefined,
 
   // Implementações das ações
   updateUserProfile: (updates) => {
@@ -523,8 +550,18 @@ export const useGamification = create<GamificationStore>((set, get) => ({
     set(state => {
       const newExperience = state.userProfile.experience + amount;
       const experienceToNextLevel = state.userProfile.level * 100;
-      
+
       if (newExperience >= experienceToNextLevel) {
+        // Show level up animation and notification
+        gamificationNotifications.sendLevelUpNotification(state.userProfile.level + 1, newExperience);
+        set({
+          rewardAnimationVisible: true,
+          rewardAnimationType: 'level_up',
+          rewardAnimationTitle: 'Nível Aumentado!',
+          rewardAnimationDescription: `Parabéns! Você alcançou o nível ${state.userProfile.level + 1}!`,
+          rewardAnimationExperience: newExperience,
+        });
+
         return {
           userProfile: {
             ...state.userProfile,
@@ -534,7 +571,7 @@ export const useGamification = create<GamificationStore>((set, get) => ({
           },
         };
       }
-      
+
       return {
         userProfile: {
           ...state.userProfile,
@@ -562,6 +599,17 @@ export const useGamification = create<GamificationStore>((set, get) => ({
 
       const newStreak = increment ? streak.currentStreak + 1 : 0;
       const newLongestStreak = Math.max(streak.longestStreak, newStreak);
+
+      // Check for streak milestones
+      if (newStreak > 0 && newStreak % 7 === 0) {
+        gamificationNotifications.sendStreakMilestoneNotification(newStreak, type);
+        set({
+          rewardAnimationVisible: true,
+          rewardAnimationType: 'streak',
+          rewardAnimationTitle: 'Sequência Record!',
+          rewardAnimationDescription: `Incrível! Você mantém uma sequência de ${newStreak} dias!`,
+        });
+      }
 
       return {
         streaks: state.streaks.map(s =>
@@ -618,6 +666,17 @@ export const useGamification = create<GamificationStore>((set, get) => ({
         unlockedAt: new Date(),
       };
 
+      // Send notification and show animation
+      gamificationNotifications.sendAchievementUnlockNotification(updatedAchievement);
+      set({
+        rewardAnimationVisible: true,
+        rewardAnimationType: 'achievement',
+        rewardAnimationTitle: achievement.name,
+        rewardAnimationDescription: achievement.description,
+        rewardAnimationPoints: achievement.points,
+        rewardAnimationIcon: achievement.icon,
+      });
+
       return {
         achievements: state.achievements.map(a =>
           a.id === achievementId ? updatedAchievement : a
@@ -645,6 +704,19 @@ export const useGamification = create<GamificationStore>((set, get) => ({
         isUnlocked: shouldUnlock,
         unlockedAt: shouldUnlock ? new Date() : achievement.unlockedAt,
       };
+
+      if (shouldUnlock) {
+        // Send notification and show animation
+        gamificationNotifications.sendAchievementUnlockNotification(updatedAchievement);
+        set({
+          rewardAnimationVisible: true,
+          rewardAnimationType: 'achievement',
+          rewardAnimationTitle: achievement.name,
+          rewardAnimationDescription: achievement.description,
+          rewardAnimationPoints: achievement.points,
+          rewardAnimationIcon: achievement.icon,
+        });
+      }
 
       return {
         achievements: state.achievements.map(a =>
@@ -687,6 +759,17 @@ export const useGamification = create<GamificationStore>((set, get) => ({
         unlockedAt: new Date(),
       };
 
+      // Send notification and show animation
+      gamificationNotifications.sendMedalUnlockNotification(updatedMedal);
+      set({
+        rewardAnimationVisible: true,
+        rewardAnimationType: 'medal',
+        rewardAnimationTitle: medal.name,
+        rewardAnimationDescription: medal.description,
+        rewardAnimationIcon: medal.icon,
+        rewardAnimationColor: medal.color,
+      });
+
       return {
         medals: state.medals.map(m =>
           m.id === medalId ? updatedMedal : m
@@ -709,6 +792,19 @@ export const useGamification = create<GamificationStore>((set, get) => ({
         isUnlocked: shouldUnlock,
         unlockedAt: shouldUnlock ? new Date() : medal.unlockedAt,
       };
+
+      if (shouldUnlock) {
+        // Send notification and show animation
+        gamificationNotifications.sendMedalUnlockNotification(updatedMedal);
+        set({
+          rewardAnimationVisible: true,
+          rewardAnimationType: 'medal',
+          rewardAnimationTitle: medal.name,
+          rewardAnimationDescription: medal.description,
+          rewardAnimationIcon: medal.icon,
+          rewardAnimationColor: medal.color,
+        });
+      }
 
       return {
         medals: state.medals.map(m =>
@@ -764,6 +860,17 @@ export const useGamification = create<GamificationStore>((set, get) => ({
         completedAt: new Date(),
       };
 
+      // Send notification and show animation
+      gamificationNotifications.sendQuestCompleteNotification(updatedQuest);
+      set({
+        rewardAnimationVisible: true,
+        rewardAnimationType: 'quest',
+        rewardAnimationTitle: quest.title,
+        rewardAnimationDescription: quest.description,
+        rewardAnimationPoints: quest.rewards.points,
+        rewardAnimationExperience: quest.rewards.experience,
+      });
+
       return {
         quests: state.quests.map(q =>
           q.id === questId ? updatedQuest : q
@@ -779,8 +886,9 @@ export const useGamification = create<GamificationStore>((set, get) => ({
 
   generateAIQuests: async () => {
     // Simular geração de quests pela IA
-    const aiQuests: Omit<Quest, 'id' | 'createdAt'>[] = [
+    const aiQuests: Quest[] = [
       {
+        id: `quest-ai-prod-${Date.now()}`,
         title: 'Desafio da Produtividade',
         description: 'Complete 20 tarefas em 7 dias',
         category: 'weekly',
@@ -799,9 +907,11 @@ export const useGamification = create<GamificationStore>((set, get) => ({
         isCompleted: false,
         isActive: true,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        createdAt: new Date(),
         suggestedBy: 'ai',
       },
       {
+        id: `quest-ai-focus-${Date.now()}`,
         title: 'Mestre do Foco',
         description: 'Complete 5 sessões de foco de 30 minutos',
         category: 'weekly',
@@ -820,6 +930,7 @@ export const useGamification = create<GamificationStore>((set, get) => ({
         isCompleted: false,
         isActive: true,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        createdAt: new Date(),
         suggestedBy: 'ai',
       },
     ];
@@ -891,4 +1002,31 @@ export const useGamification = create<GamificationStore>((set, get) => ({
   setIsLoading: (loading) => {
     set({ isLoading: loading });
   },
+
+  showRewardAnimation: (type, title, description, points, experience, icon, color) => {
+    set({
+      rewardAnimationVisible: true,
+      rewardAnimationType: type,
+      rewardAnimationTitle: title,
+      rewardAnimationDescription: description,
+      rewardAnimationPoints: points,
+      rewardAnimationExperience: experience,
+      rewardAnimationIcon: icon,
+      rewardAnimationColor: color,
+    });
+  },
+
+  hideRewardAnimation: () => {
+    set({
+      rewardAnimationVisible: false,
+      rewardAnimationType: null,
+      rewardAnimationTitle: '',
+      rewardAnimationDescription: '',
+      rewardAnimationPoints: undefined,
+      rewardAnimationExperience: undefined,
+      rewardAnimationIcon: undefined,
+      rewardAnimationColor: undefined,
+    });
+  },
 }));
+

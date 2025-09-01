@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, memo } from 'react';
 import { Plus, MoreVertical, Clock, Flag } from 'lucide-react';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';

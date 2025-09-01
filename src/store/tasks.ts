@@ -356,11 +356,11 @@ export const useTasks = create<TasksStore>((set, get) => ({
     set((state) => ({
       tasks: state.tasks.map((task) =>
         task.id === id
-          ? { 
-              ...task, 
+          ? {
+              ...task,
               completed: !task.completed,
-              status: !task.completed ? 'completed' : 'pending',
-              updatedAt: new Date() 
+              status: task.status === 'completed' ? 'pending' : 'completed',
+              updatedAt: new Date()
             }
           : task
       ),
@@ -518,7 +518,7 @@ export const useTasks = create<TasksStore>((set, get) => ({
     // Verificar se todas as dependências foram completadas
     const incompleteDependencies = task.dependencies.filter((dep) => {
       const dependsOnTask = get().tasks.find((t) => t.id === dep.dependsOnTaskId);
-      return dependsOnTask && !dependsOnTask.completed;
+      return dependsOnTask && dependsOnTask.status !== 'completed';
     });
 
     return incompleteDependencies.length === 0;
@@ -766,7 +766,7 @@ export const useTasks = create<TasksStore>((set, get) => ({
   getOverdueTasks: () => {
     const now = new Date();
     return get().tasks.filter((task) => {
-      if (!task.dueDate || task.completed) return false;
+      if (!task.dueDate || task.status === 'completed') return false;
       return task.dueDate < now;
     });
   },
@@ -775,7 +775,7 @@ export const useTasks = create<TasksStore>((set, get) => ({
     const now = new Date();
     const soon = new Date(now.getTime() + hours * 60 * 60 * 1000);
     return get().tasks.filter((task) => {
-      if (!task.dueDate || task.completed) return false;
+      if (!task.dueDate || task.status === 'completed') return false;
       return task.dueDate >= now && task.dueDate <= soon;
     });
   },

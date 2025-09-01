@@ -74,10 +74,29 @@ export interface CloudBackup {
   encrypted: boolean;
 }
 
+export interface WearableDevice {
+  id: string;
+  name: string;
+  provider: 'apple-watch' | 'fitbit' | 'samsung';
+  model: string;
+  isConnected: boolean;
+  lastSync: Date | null;
+  syncEnabled: boolean;
+  syncFrequency: 'realtime' | 'hourly' | 'daily';
+  batteryLevel: number;
+  syncFeatures: {
+    pomodoro: boolean;
+    notifications: boolean;
+    newTask: boolean;
+    agenda: boolean;
+  };
+  permissions: string[];
+}
+
 export interface Integration {
   id: string;
   name: string;
-  provider: 'google' | 'trello' | 'icloud' | 'notion' | 'slack' | 'github';
+  provider: 'google' | 'trello' | 'asana' | 'icloud' | 'notion' | 'slack' | 'github';
   icon: string;
   isConnected: boolean;
   lastSync: Date | null;
@@ -146,6 +165,7 @@ interface SettingsStore {
   iconSets: IconSet[];
   fonts: FontConfig[];
   cloudBackups: CloudBackup[];
+  wearableDevices: WearableDevice[];
   integrations: Integration[];
   notifications: NotificationSettings[];
   smartNotifications: SmartNotification[];
@@ -160,6 +180,7 @@ interface SettingsStore {
   showNotificationsModal: boolean;
   showSmartNotificationsModal: boolean;
   showProfileModal: boolean;
+  showWearableDevicesModal: boolean;
   selectedTheme: ThemeConfig | null;
   selectedIconSet: IconSet | null;
   selectedFont: FontConfig | null;
@@ -208,6 +229,15 @@ interface SettingsStore {
   performBackup: (id: string) => Promise<boolean>;
   restoreBackup: (id: string) => Promise<boolean>;
   getCloudBackups: () => CloudBackup[];
+  
+  // Ações para Dispositivos Wearable
+  addWearableDevice: (device: Omit<WearableDevice, 'id'>) => void;
+  updateWearableDevice: (id: string, updates: Partial<WearableDevice>) => void;
+  deleteWearableDevice: (id: string) => void;
+  connectWearableDevice: (id: string) => Promise<boolean>;
+  disconnectWearableDevice: (id: string) => void;
+  syncWearableDevice: (id: string) => Promise<boolean>;
+  getWearableDevices: () => WearableDevice[];
   
   // Ações para Integrações
   addIntegration: (integration: Omit<Integration, 'id'>) => void;
@@ -265,6 +295,8 @@ export const useSettings = create<SettingsStore>((set, get) => ({
       vibrationEnabled: true,
     },
   },
+  wearableDevices: [],
+  showWearableDevicesModal: false,
   userProfiles: [
     {
       id: 'user-1',
@@ -402,6 +434,12 @@ export const useSettings = create<SettingsStore>((set, get) => ({
       backupFrequency: 'daily',
       storageUsed: 256,
       storageLimit: 15000,
+      incrementalBackup: true,
+      backupRetention: 30,
+      compressionEnabled: true,
+      lastIncrementalBackup: new Date(),
+      backupSize: 256,
+      encrypted: true,
     },
     {
       id: 'icloud',
@@ -412,6 +450,12 @@ export const useSettings = create<SettingsStore>((set, get) => ({
       backupFrequency: 'weekly',
       storageUsed: 0,
       storageLimit: 5000,
+      incrementalBackup: false,
+      backupRetention: 7,
+      compressionEnabled: false,
+      lastIncrementalBackup: null,
+      backupSize: 0,
+      encrypted: false,
     },
     {
       id: 'dropbox',
@@ -422,6 +466,12 @@ export const useSettings = create<SettingsStore>((set, get) => ({
       backupFrequency: 'monthly',
       storageUsed: 0,
       storageLimit: 2000,
+      incrementalBackup: false,
+      backupRetention: 90,
+      compressionEnabled: true,
+      lastIncrementalBackup: null,
+      backupSize: 0,
+      encrypted: false,
     },
   ],
   integrations: [

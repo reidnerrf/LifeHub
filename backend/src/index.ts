@@ -5,15 +5,96 @@ import mongoose, { Schema, model } from 'mongoose';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import pino from 'pino';
+import { createServer } from 'http';
+import { Server as SocketIOServer } from 'socket.io';
 
 import * as Sentry from '@sentry/node';
 import { transcriptionService } from './transcription-service';
+import { googleSpeechService } from './google-speech-service';
+import { Note } from './models/Note';
+import { Comment } from './models/Comment';
+import { AuthenticatedRequest, JWTPayload } from './types';
 
 dotenv.config();
 const logger = pino({ transport: { target: 'pino-pretty' } });
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 4000;
+
+// Create HTTP server and Socket.IO server
+const httpServer = createServer(app);
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
+
+// Socket.IO authentication middleware
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+  if (!token) {
+    return next(new Error('Authentication error'));
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'devsecret') as any;
+    socket.data.userId = decoded.sub;
+    next();
+  } catch (err) {
+    next(new Error('Authentication error'));
+  }
+});
+
+// Socket.IO event handlers for notes collaboration
+io.on('connection', (socket) => {
+  const userId = socket.data.userId;
+  logger.info(`User ${userId} connected for real-time collaboration`);
+
+  // Join a note room for collaboration
+  socket.on('join-note', (noteId: string) => {
+    socket.join(`note-${noteId}`);
+    logger.info(`User ${userId} joined note room: ${noteId}`);
+  });
+
+  // Leave a note room
+  socket.on('leave-note', (noteId: string) => {
+    socket.leave(`note-${noteId}`);
+    logger.info(`User ${userId} left note room: ${noteId}`);
+  });
+
+  // Broadcast note updates to other users in the same room
+  socket.on('note-update', (data: { noteId: string; content: string; title?: string }) => {
+    socket.to(`note-${data.noteId}`).emit('note-updated', {
+      ...data,
+      updatedBy: userId,
+      timestamp: new Date().toISOString()
+    });
+    logger.info(`Note ${data.noteId} updated by user ${userId}`);
+  });
+
+  // Handle user typing indicators
+  socket.on('typing-start', (noteId: string) => {
+    socket.to(`note-${noteId}`).emit('user-typing', { userId });
+  });
+
+  socket.on('typing-stop', (noteId: string) => {
+    socket.to(`note-${noteId}`).emit('user-stopped-typing', { userId });
+  });
+
+  // Handle disconnection
+  socket.on('disconnect', () => {
+    logger.info(`User ${userId} disconnected from real-time collaboration`);
+  });
+});
+
+// Start the HTTP server with Socket.IO
+httpServer.listen(port, () => {
+  logger.info(`Server running on port ${port} with Socket.IO support`);
+});
 
 // Sentry (Observability)
 if (process.env.SENTRY_DSN) {
@@ -58,57 +139,7 @@ const TaskSchema = new Schema({
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 }, { timestamps: true });
-const NoteSchema = new Schema({
-  userId: { type: String, index: true },
-  title: { type: String, required: true },
-  content: { type: String, default: '' },
-  type: { type: String, enum: ['text', 'voice', 'image'], default: 'text' },
-  notebook: { type: String, default: 'Geral' },
-  tags: [{ type: String }],
-  attachments: [{
-    id: { type: String },
-    type: { type: String, enum: ['image', 'audio', 'file'] },
-    url: { type: String },
-    name: { type: String },
-    size: { type: Number },
-    createdAt: { type: Date }
-  }],
-  aiSummary: { type: String, default: '' },
-  transcription: { 
-    text: { type: String, default: '' },
-    status: { 
-      type: String, 
-      enum: ['pending', 'processing', 'completed', 'failed', 'not_applicable'], 
-      default: 'not_applicable' 
-    },
-    confidence: { type: Number, default: 0 },
-    language: { type: String, default: 'pt-BR' },
-    processedAt: { type: Date },
-    error: { type: String }
-  },
-  isPinned: { type: Boolean, default: false },
-  isArchived: { type: Boolean, default: false },
-  versionHistory: [{
-    content: { type: String },
-    updatedAt: { type: Date, default: Date.now }
-  }],
-  // Sync and sharing fields
-  syncStatus: {
-    synced: { type: Boolean, default: false },
-    lastSynced: { type: Date },
-    syncVersion: { type: Number, default: 0 }
-  },
-  sharing: {
-    isShared: { type: Boolean, default: false },
-    sharedWith: [{
-      userId: { type: String },
-      permission: { type: String, enum: ['view', 'edit', 'comment'], default: 'view' },
-      sharedAt: { type: Date, default: Date.now }
-    }],
-    publicLink: { type: String },
-    linkExpires: { type: Date }
-  }
-}, { timestamps: true });
+
 
 const SuggestionSchema = new Schema({
   userId: { type: String, index: true },
@@ -203,7 +234,6 @@ const AchievementSchema = new Schema({
 
 const User = model('User', UserSchema);
 const Task = model('Task', TaskSchema);
-const Note = model('Note', NoteSchema);
 
 const Suggestion = model('Suggestion', SuggestionSchema);
 const Event = model('Event', EventSchema);
@@ -240,13 +270,13 @@ const WeeklyQuest = model('WeeklyQuest', WeeklyQuestSchema);
 
 
 // Auth
-  const authMiddleware = (req: any, res: any, next: any) => {
+const authMiddleware = (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers.authorization as string | undefined;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
   try {
     if (token) {
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'devsecret') as any;
-      req.userId = decoded.sub;
+      req.userId = decoded.sub as string;
     }
   } catch {}
 
@@ -287,36 +317,36 @@ app.use(authMiddleware);
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // Tasks CRUD
-app.get('/tasks', async (req: any, res) => {
+app.get('/tasks', async (req: AuthenticatedRequest, res) => {
   const userId = String(req.userId);
   res.json(await Task.find({ userId }).sort({ createdAt: -1 }));
 });
-app.post('/tasks', async (req: any, res) => {
+app.post('/tasks', async (req: AuthenticatedRequest, res) => {
   const userId = String(req.userId);
   const t = await Task.create({ ...req.body, userId });
   res.status(201).json(t);
 });
-app.patch('/tasks/:id', async (req, res) => {
+app.patch('/tasks/:id', async (req: AuthenticatedRequest, res) => {
   const t = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true });
   res.json(t);
 });
-app.delete('/tasks/:id', async (req, res) => {
+app.delete('/tasks/:id', async (req: AuthenticatedRequest, res) => {
   await Task.findByIdAndDelete(req.params.id);
   res.status(204).end();
 });
 
 // Notes CRUD
-app.get('/notes', async (req: any, res) => {
+app.get('/notes', async (req: AuthenticatedRequest, res) => {
   const userId = String(req.userId);
   const { notebook, type, isPinned, isArchived, search } = req.query;
-  
+
   let query: any = { userId };
-  
+
   if (notebook) query.notebook = notebook;
   if (type) query.type = type;
   if (isPinned !== undefined) query.isPinned = isPinned === 'true';
   if (isArchived !== undefined) query.isArchived = isArchived === 'true';
-  
+
   if (search) {
     query.$or = [
       { title: { $regex: search, $options: 'i' } },
@@ -324,42 +354,72 @@ app.get('/notes', async (req: any, res) => {
       { tags: { $in: [new RegExp(search as string, 'i')] } }
     ];
   }
-  
+
   res.json(await Note.find(query).sort({ isPinned: -1, createdAt: -1 }));
 });
 
-app.get('/notes/notebooks', async (req: any, res) => {
+app.get('/notes/notebooks', async (req: AuthenticatedRequest, res) => {
   const userId = String(req.userId);
   const notebooks = await Note.distinct('notebook', { userId });
   res.json(notebooks);
 });
 
-app.get('/notes/:id', async (req: any, res) => {
+app.get('/notes/:id', async (req: AuthenticatedRequest, res) => {
   const note = await Note.findById(req.params.id);
   if (!note) return res.status(404).json({ error: 'Note not found' });
   res.json(note);
 });
 
-app.post('/notes', async (req: any, res) => {
+app.post('/notes', async (req: AuthenticatedRequest, res) => {
   const userId = String(req.userId);
-  const n = await Note.create({ ...req.body, userId });
+  const noteData = { ...req.body, userId };
+
+  // Initialize versionHistory if not provided
+  if (!noteData.versionHistory) {
+    noteData.versionHistory = [];
+  }
+
+  const n = await Note.create(noteData);
+
+  // Emit real-time event for note creation
+  io.to(`note-${n._id}`).emit('note-created', {
+    noteId: n._id,
+    note: n,
+    createdBy: userId,
+    timestamp: new Date().toISOString()
+  });
+
   res.status(201).json(n);
 });
 
 app.patch('/notes/:id', async (req, res) => {
   const note = await Note.findById(req.params.id);
   if (!note) return res.status(404).json({ error: 'Note not found' });
-  
+
   // Save current content to version history before updating
   if (req.body.content && req.body.content !== note.content) {
+    if (!note.versionHistory) {
+      note.versionHistory = [];
+    }
     note.versionHistory.push({
       content: note.content,
       updatedAt: new Date()
     });
     await note.save();
   }
-  
+
   const updatedNote = await Note.findByIdAndUpdate(req.params.id, req.body, { new: true });
+
+  // Emit real-time event for note update
+  if (updatedNote) {
+    io.to(`note-${req.params.id}`).emit('note-updated', {
+      noteId: req.params.id,
+      note: updatedNote,
+      updatedBy: String(req.userId),
+      timestamp: new Date().toISOString()
+    });
+  }
+
   res.json(updatedNote);
 });
 
@@ -432,32 +492,62 @@ app.post('/notes/:id/restore/:versionIndex', async (req, res) => {
 });
 
 // Notes search with RAG-like functionality
-app.get('/notes/search/advanced', async (req: any, res) => {
+app.get('/notes/search/advanced', async (req: AuthenticatedRequest, res) => {
   const userId = String(req.userId);
-  const { q, notebook, type, tags, dateFrom, dateTo } = req.query;
-  
-  let query: any = { userId };
-  
-  if (q) {
+  const { q, notebook, type, tags, dateFrom, dateTo } = req.query as {
+    q?: string;
+    notebook?: string;
+    type?: string;
+    tags?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  };
+
+  const query: any = { userId };
+
+  if (q && typeof q === 'string') {
     query.$or = [
       { title: { $regex: q, $options: 'i' } },
       { content: { $regex: q, $options: 'i' } },
       { aiSummary: { $regex: q, $options: 'i' } }
     ];
   }
-  
-  if (notebook) query.notebook = notebook;
-  if (type) query.type = type;
-  if (tags) query.tags = { $in: tags.split(',') };
-  
+
+  if (notebook && typeof notebook === 'string') {
+    query.notebook = notebook;
+  }
+
+  if (type && typeof type === 'string') {
+    query.type = type;
+  }
+
+  if (tags && typeof tags === 'string') {
+    query.tags = { $in: tags.split(',').map(tag => tag.trim()) };
+  }
+
   if (dateFrom || dateTo) {
     query.createdAt = {};
-    if (dateFrom) query.createdAt.$gte = new Date(dateFrom);
-    if (dateTo) query.createdAt.$lte = new Date(dateTo);
+    if (dateFrom && typeof dateFrom === 'string') {
+      const dateFromParsed = new Date(dateFrom);
+      if (!isNaN(dateFromParsed.getTime())) {
+        query.createdAt.$gte = dateFromParsed;
+      }
+    }
+    if (dateTo && typeof dateTo === 'string') {
+      const dateToParsed = new Date(dateTo);
+      if (!isNaN(dateToParsed.getTime())) {
+        query.createdAt.$lte = dateToParsed;
+      }
+    }
   }
-  
-  const notes = await Note.find(query).sort({ createdAt: -1 });
-  res.json(notes);
+
+  try {
+    const notes = await Note.find(query).sort({ createdAt: -1 });
+    res.json(notes);
+  } catch (error) {
+    logger.error('Error in advanced search:', error);
+    res.status(500).json({ error: 'Search failed' });
+  }
 });
 
 // AI Summary generation (stub - would integrate with actual AI service)
@@ -476,7 +566,7 @@ app.post('/notes/:id/summarize', async (req, res) => {
 // Notes statistics
 app.get('/notes/stats', async (req: any, res) => {
   const userId = String(req.userId);
-  
+
   const totalNotes = await Note.countDocuments({ userId });
   const pinnedNotes = await Note.countDocuments({ userId, isPinned: true });
   const archivedNotes = await Note.countDocuments({ userId, isArchived: true });
@@ -485,7 +575,7 @@ app.get('/notes/stats', async (req: any, res) => {
     { $match: { userId } },
     { $group: { _id: '$type', count: { $sum: 1 } } }
   ]);
-  
+
   res.json({
     totalNotes,
     pinnedNotes,
@@ -493,6 +583,127 @@ app.get('/notes/stats', async (req: any, res) => {
     notebookCount: notebooks.length,
     noteTypes
   });
+});
+
+// Comments CRUD
+app.get('/notes/:noteId/comments', async (req: AuthenticatedRequest, res) => {
+  const userId = String(req.userId);
+  const { noteId } = req.params;
+
+  // Check if user has access to the note
+  const note = await Note.findById(noteId);
+  if (!note) return res.status(404).json({ error: 'Note not found' });
+
+  // Check if user owns the note or has sharing access
+  const hasAccess = note.userId === userId ||
+    (note.sharing.isShared && note.sharing.sharedWith.some(s => s.userId === userId));
+
+  if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+
+  const comments = await Comment.find({ noteId }).sort({ createdAt: 1 });
+  res.json(comments);
+});
+
+app.post('/notes/:noteId/comments', async (req: AuthenticatedRequest, res) => {
+  const userId = String(req.userId);
+  const { noteId } = req.params;
+  const { content } = req.body;
+
+  if (!content || !content.trim()) {
+    return res.status(400).json({ error: 'Comment content is required' });
+  }
+
+  // Check if user has access to the note
+  const note = await Note.findById(noteId);
+  if (!note) return res.status(404).json({ error: 'Note not found' });
+
+  // Check if user owns the note or has sharing access with comment permission
+  const hasAccess = note.userId === userId ||
+    (note.sharing.isShared && note.sharing.sharedWith.some(s =>
+      s.userId === userId && (s.permission === 'edit' || s.permission === 'comment')
+    ));
+
+  if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+
+  const comment = await Comment.create({
+    noteId,
+    userId,
+    content: content.trim()
+  });
+
+  // Emit real-time event for new comment
+  io.to(`note-${noteId}`).emit('comment-added', {
+    commentId: comment._id,
+    noteId,
+    userId,
+    content: comment.content,
+    createdAt: comment.createdAt,
+    timestamp: new Date().toISOString()
+  });
+
+  res.status(201).json(comment);
+});
+
+app.patch('/comments/:commentId', async (req: AuthenticatedRequest, res) => {
+  const userId = String(req.userId);
+  const { commentId } = req.params;
+  const { content } = req.body;
+
+  if (!content || !content.trim()) {
+    return res.status(400).json({ error: 'Comment content is required' });
+  }
+
+  const comment = await Comment.findById(commentId);
+  if (!comment) return res.status(404).json({ error: 'Comment not found' });
+
+  // Only comment author can edit
+  if (comment.userId !== userId) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  comment.content = content.trim();
+  await comment.save();
+
+  // Emit real-time event for comment update
+  io.to(`note-${comment.noteId}`).emit('comment-updated', {
+    commentId: comment._id,
+    noteId: comment.noteId,
+    userId,
+    content: comment.content,
+    updatedAt: comment.updatedAt,
+    timestamp: new Date().toISOString()
+  });
+
+  res.json(comment);
+});
+
+app.delete('/comments/:commentId', async (req: AuthenticatedRequest, res) => {
+  const userId = String(req.userId);
+  const { commentId } = req.params;
+
+  const comment = await Comment.findById(commentId);
+  if (!comment) return res.status(404).json({ error: 'Comment not found' });
+
+  // Check if user owns the comment or the note
+  const note = await Note.findById(comment.noteId);
+  const isOwner = comment.userId === userId;
+  const isNoteOwner = note && note.userId === userId;
+
+  if (!isOwner && !isNoteOwner) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  await Comment.findByIdAndDelete(commentId);
+
+  // Emit real-time event for comment deletion
+  io.to(`note-${comment.noteId}`).emit('comment-deleted', {
+    commentId,
+    noteId: comment.noteId,
+    userId,
+    timestamp: new Date().toISOString()
+  });
+
+  res.status(204).end();
 });
 
 // Transcription endpoints
@@ -1737,7 +1948,6 @@ app.post('/assistant/ritual/pre-deep-work', async (req, res) => {
   res.json({ steps: ['Respiração 2min', 'Preparar ambiente', 'Definir objetivo da sessão'] });
 });
 
-const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 4000;
 app.listen(port, () => logger.info(`api on ${port}`));
 
 export default app;

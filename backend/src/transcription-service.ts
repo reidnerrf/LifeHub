@@ -1,4 +1,6 @@
 import { Note, IAttachment } from './models/Note';
+import { googleSpeechService, TranscriptionResult } from './google-speech-service';
+import { TranscriptionStatus } from './types';
 import pino from 'pino';
 
 const logger = pino({ transport: { target: 'pino-pretty' } });
@@ -17,7 +19,7 @@ export class TranscriptionService {
   }
 
   /**
-   * Process voice note transcription
+   * Process voice note transcription using Google Speech-to-Text
    */
   async processVoiceNote(noteId: string, audioUrl: string, language: string = 'pt-BR'): Promise<void> {
     try {
@@ -28,50 +30,49 @@ export class TranscriptionService {
         'transcription.language': language
       });
 
-      // Simulate transcription processing (would integrate with actual speech-to-text service)
-      logger.info(`Starting transcription for note ${noteId}, language: ${language}`);
-      
-      // Add to processing queue with timeout
-      const timeout = setTimeout(async () => {
+      logger.info(`Starting Google Speech-to-Text transcription for note ${noteId}, language: ${language}`);
+
+      // Check if Google Speech service is configured
+      if (!googleSpeechService.isConfigured()) {
+        throw new Error('Google Speech-to-Text service is not properly configured. Please check your Google Cloud credentials.');
+      }
+
+      // Process transcription asynchronously
+      const processTranscription = async () => {
         try {
-          // Simulate transcription result
-          const transcriptions = [
-            "Esta é uma nota de voz transcrita automaticamente pelo sistema.",
-            "Reunião importante com cliente sobre novos requisitos do projeto.",
-            "Lembrar de comprar leite, pão e ovos no supermercado.",
-            "Ideias para implementar no próximo sprint de desenvolvimento.",
-            "Gravação da reunião de equipe sobre planejamento estratégico."
-          ];
-          
-          const randomText = transcriptions[Math.floor(Math.random() * transcriptions.length)];
-          const confidence = Math.random() * 0.3 + 0.7; // 70-100% confidence
+          const result: TranscriptionResult = await googleSpeechService.transcribeAudio(audioUrl, language);
 
           await Note.findByIdAndUpdate(noteId, {
-            'transcription.text': randomText,
+            'transcription.text': result.text,
             'transcription.status': 'completed',
-            'transcription.confidence': confidence,
+            'transcription.confidence': result.confidence,
             'transcription.processedAt': new Date(),
             'transcription.error': null
           });
 
-          logger.info(`Transcription completed for note ${noteId} with confidence: ${confidence}`);
-        } catch (error: any) {
-          logger.error(`Transcription failed for note ${noteId}:`, error);
+          logger.info(`Google Speech-to-Text transcription completed for note ${noteId} with confidence: ${result.confidence}`);
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown transcription error';
+          logger.error(`Google Speech-to-Text transcription failed for note ${noteId}: ${errorMessage}`);
+
           await Note.findByIdAndUpdate(noteId, {
             'transcription.status': 'failed',
-            'transcription.error': error.message
+            'transcription.error': errorMessage
           });
         } finally {
           this.processingQueue.delete(noteId);
         }
-      }, 5000); // Simulate 5 second processing time
+      };
 
-      this.processingQueue.set(noteId, timeout);
-    } catch (error: any) {
-      logger.error(`Error starting transcription for note ${noteId}:`, error);
+      // Start transcription process
+      processTranscription();
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      logger.error(`Error starting Google Speech-to-Text transcription for note ${noteId}: ${errorMessage}`);
       await Note.findByIdAndUpdate(noteId, {
         'transcription.status': 'failed',
-        'transcription.error': error.message
+        'transcription.error': errorMessage
       });
     }
   }
@@ -94,9 +95,22 @@ export class TranscriptionService {
   /**
    * Get transcription status
    */
-  async getTranscriptionStatus(noteId: string): Promise<any> {
+  async getTranscriptionStatus(noteId: string): Promise<TranscriptionStatus | null> {
     const note = await Note.findById(noteId);
-    return note?.transcription || null;
+    if (!note) return null;
+
+    // Map status values and handle type conversions
+    const status = note.transcription.status === 'not_applicable' ? 'pending' : note.transcription.status as 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
+
+    const result: TranscriptionStatus = { status };
+
+    if (note.transcription.text) result.text = note.transcription.text;
+    if (note.transcription.confidence) result.confidence = note.transcription.confidence;
+    if (note.transcription.language) result.language = note.transcription.language;
+    if (note.transcription.error) result.error = note.transcription.error;
+    if (note.transcription.processedAt) result.processedAt = note.transcription.processedAt;
+
+    return result;
   }
 
   /**
@@ -131,7 +145,7 @@ export class TranscriptionService {
     for (const note of pendingNotes) {
       const audioAttachment = note.attachments.find((att: IAttachment) => att.type === 'audio');
       if (audioAttachment) {
-        await this.processVoiceNote(note._id.toString(), audioAttachment.url, note.transcription?.language || 'pt-BR');
+        await this.processVoiceNote((note._id as any).toString(), audioAttachment.url, note.transcription?.language || 'pt-BR');
       }
     }
   }

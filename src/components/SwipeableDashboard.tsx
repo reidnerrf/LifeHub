@@ -1,5 +1,5 @@
-import React from 'react';
-import { ScrollView, View, StyleSheet, Dimensions } from 'react-native';
+import React, { useRef } from 'react';
+import { ScrollView, View, StyleSheet, Dimensions, Animated, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -8,20 +8,29 @@ interface SwipeableDashboardProps {
 }
 
 export default function SwipeableDashboard({ children }: SwipeableDashboardProps) {
+  const scrollX = useRef(new Animated.Value(0)).current;
+
+  const onScroll = Animated.event(
+    [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+    { useNativeDriver: true }
+  );
+
   return (
-    <ScrollView
+    <Animated.ScrollView
       horizontal
       pagingEnabled
       showsHorizontalScrollIndicator={false}
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
+      onScroll={onScroll}
+      scrollEventThrottle={16}
     >
       {children.map((child, index) => (
-        <View key={index} style={styles.page}>
+        <Animated.View key={index} style={[styles.page]}>
           {child}
-        </View>
+        </Animated.View>
       ))}
-    </ScrollView>
+    </Animated.ScrollView>
   );
 }
 
