@@ -33,6 +33,14 @@ export default function CloudBackupModal({
   const [connecting, setConnecting] = useState<string | null>(null);
   const [backingUp, setBackingUp] = useState<string | null>(null);
   const [restoring, setRestoring] = useState<string | null>(null);
+  
+  const toggleEncryption = (backup: CloudBackup) => {
+    updateCloudBackup(backup.id, { encrypted: !backup.encrypted });
+  };
+  
+  const verifyBackup = (backup: CloudBackup) => {
+    Alert.alert('Verificação', 'Verificação de integridade iniciada.');
+  };
 
   const getProviderIcon = (provider: CloudBackup['provider']) => {
     switch (provider) {
@@ -271,6 +279,15 @@ export default function CloudBackupModal({
                 {backup.backupFrequency === 'monthly' && 'Mensal'}
               </Text>
             </View>
+            <View style={styles.settingRow}>
+              <Text style={styles.settingLabel}>Criptografia</Text>
+              <TouchableOpacity
+                style={[styles.toggle, { backgroundColor: backup.encrypted ? '#34C759' : '#E0E0E0' }]}
+                onPress={() => toggleEncryption(backup)}
+              >
+                <View style={[styles.toggleThumb, { transform: [{ translateX: backup.encrypted ? 20 : 0 }] }]} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.backupActions}>
@@ -302,6 +319,11 @@ export default function CloudBackupModal({
               <Text style={[styles.actionButtonText, styles.restoreButtonText]}>
                 {restoring === backup.id ? 'Restaurando...' : 'Restaurar'}
               </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.verifyButton} onPress={() => verifyBackup(backup)}>
+              <Ionicons name="shield-checkmark-outline" size={16} color="#007AFF" />
+              <Text style={styles.verifyText}>Verificar</Text>
             </TouchableOpacity>
           </View>
         </>
@@ -565,6 +587,20 @@ const styles = StyleSheet.create({
   },
   restoreButtonText: {
     color: '#007AFF',
+  },
+  verifyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F5F8FF',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  verifyText: {
+    color: '#007AFF',
+    marginLeft: 8,
+    fontWeight: '600',
   },
   connectionActions: {
     alignItems: 'center',

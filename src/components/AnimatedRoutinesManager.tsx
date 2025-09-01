@@ -537,4 +537,122 @@ const styles = StyleSheet.create({
   routineName: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom:
+    marginBottom: 4,
+  },
+  routineDescription: {
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  routineMeta: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  metaText: {
+    fontSize: 12,
+  },
+  routineStatus: {
+    alignItems: 'flex-end',
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  activitiesSection: {
+    marginBottom: 16,
+  },
+  activitiesTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  activityCard: {
+    borderRadius: 10,
+    padding: 12,
+    marginRight: 10,
+    width: 120,
+    alignItems: 'center',
+  },
+  activityHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  activityOrder: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  activityTitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  activityDuration: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  optionalBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  optionalText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  routineActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 16,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+  },
+  actionText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 12,
+    gap: 8,
+  },
+  addButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 10,
+  },
+  emptyDescription: {
+    fontSize: 14,
+    marginTop: 5,
+    textAlign: 'center',
+  },
+});

@@ -11,6 +11,15 @@ export interface Note {
   aiSummary?: string;
   isPinned: boolean;
   isArchived: boolean;
+  progress?: number;
+  // Collaboration & offline
+  sharedWith?: { userId: string; permission: 'view' | 'comment' | 'edit' }[];
+  comments?: NoteComment[];
+  versions?: NoteVersion[];
+  isLocked?: boolean;
+  lockOwnerId?: string;
+  isOffline?: boolean;
+  pendingSync?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -32,6 +41,11 @@ export interface Notebook {
   description?: string;
   isDefault: boolean;
   createdAt: Date;
+  theme?: {
+    background?: string;
+    textColor?: string;
+    accentColor?: string;
+  };
 }
 
 export interface SearchResult {
@@ -39,6 +53,25 @@ export interface SearchResult {
   relevance: number;
   matchedFields: string[];
   highlights: string[];
+}
+
+export interface NoteComment {
+  id: string;
+  noteId: string;
+  authorId: string;
+  authorName?: string;
+  content: string;
+  createdAt: Date;
+  resolved: boolean;
+}
+
+export interface NoteVersion {
+  id: string;
+  noteId: string;
+  content: string;
+  title: string;
+  createdAt: Date;
+  authorId?: string;
 }
 
 interface NotesStore {
@@ -100,6 +133,23 @@ interface NotesStore {
   setSelectedTags: (tags: string[]) => void;
   setSearchQuery: (query: string) => void;
   setIsSearching: (isSearching: boolean) => void;
+
+  // Premium
+  setNotebookTheme: (notebookId: string, theme: NonNullable<Notebook['theme']>) => void;
+  categorizeNote: (noteId: string) => Promise<string[]>;
+  analyzeNoteContent: (noteId: string) => Promise<Record<string, string>>;
+
+  // Collaboration
+  shareNote: (noteId: string, userId: string, permission: 'view' | 'comment' | 'edit') => void;
+  revokeShare: (noteId: string, userId: string) => void;
+  addComment: (noteId: string, content: string, authorId: string, authorName?: string) => void;
+  resolveComment: (noteId: string, commentId: string) => void;
+  addVersion: (noteId: string) => void;
+  diffVersions: (noteId: string, a: string, b: string) => { added: string[]; removed: string[]; changed: string[] };
+
+  // Offline
+  queueNoteForSync: (noteId: string) => void;
+  markSynced: (noteId: string) => void;
 }
 
 export const useNotes = create<NotesStore>((set, get) => ({
@@ -116,6 +166,12 @@ export const useNotes = create<NotesStore>((set, get) => ({
       aiSummary: 'Nota sobre melhorias do projeto incluindo notificações, UX e modo escuro.',
       isPinned: true,
       isArchived: false,
+      sharedWith: [],
+      comments: [],
+      versions: [],
+      isLocked: false,
+      isOffline: false,
+      pendingSync: false,
       createdAt: new Date('2024-12-01'),
       updatedAt: new Date('2024-12-01'),
     },
@@ -130,6 +186,12 @@ export const useNotes = create<NotesStore>((set, get) => ({
       aiSummary: 'Receita completa de bolo de chocolate com ingredientes e modo de preparo.',
       isPinned: false,
       isArchived: false,
+      sharedWith: [],
+      comments: [],
+      versions: [],
+      isLocked: false,
+      isOffline: false,
+      pendingSync: false,
       createdAt: new Date('2024-12-02'),
       updatedAt: new Date('2024-12-02'),
     },
@@ -153,6 +215,12 @@ export const useNotes = create<NotesStore>((set, get) => ({
       aiSummary: 'Reunião com cliente sobre novos requisitos incluindo integração API e dashboard.',
       isPinned: false,
       isArchived: false,
+      sharedWith: [],
+      comments: [],
+      versions: [],
+      isLocked: false,
+      isOffline: false,
+      pendingSync: false,
       createdAt: new Date('2024-12-03'),
       updatedAt: new Date('2024-12-03'),
     },
@@ -560,5 +628,113 @@ export const useNotes = create<NotesStore>((set, get) => ({
 
   setIsSearching: (isSearching) => {
     set({ isSearching });
+  },
+
+  // Premium
+  setNotebookTheme: (notebookId, theme) => {
+    set((state) => ({
+      notebooks: state.notebooks.map((nb) => (nb.id === notebookId ? { ...nb, theme } : nb)),
+    }));
+  },
+  categorizeNote: async (noteId) => {
+    const note = get().notes.find((n) => n.id === noteId);
+    if (!note) return [];
+    const { notesMLService } = await import('../services/notesMLService');
+    const res = await notesMLService.categorize(note);
+    // Optionally map categories to tags
+    set((state) => ({
+      notes: state.notes.map((n) => (n.id === noteId ? { ...n, tags: Array.from(new Set([...n.tags, ...res.categories])) } : n)),
+    }));
+    return res.categories;
+  },
+  analyzeNoteContent: async (noteId) => {
+    const note = get().notes.find((n) => n.id === noteId);
+    if (!note) return {} as Record<string, string>;
+    const { notesMLService } = await import('../services/notesMLService');
+    const insights = await notesMLService.analyzeContent(note);
+    const map: Record<string, string> = {};
+    insights.forEach((i) => (map[i.key] = i.value));
+    return map;
+  },
+
+  // Collaboration
+  shareNote: (noteId, userId, permission) => {
+    set((state) => ({
+      notes: state.notes.map((n) =>
+        n.id === noteId
+          ? { ...n, sharedWith: [...(n.sharedWith || []), { userId, permission }] }
+          : n
+      ),
+    }));
+  },
+  revokeShare: (noteId, userId) => {
+    set((state) => ({
+      notes: state.notes.map((n) =>
+        n.id === noteId
+          ? { ...n, sharedWith: (n.sharedWith || []).filter((s) => s.userId !== userId) }
+          : n
+      ),
+    }));
+  },
+  addComment: (noteId, content, authorId, authorName) => {
+    const newComment: NoteComment = {
+      id: `c-${Date.now()}`,
+      noteId,
+      authorId,
+      authorName,
+      content,
+      createdAt: new Date(),
+      resolved: false,
+    };
+    set((state) => ({
+      notes: state.notes.map((n) => (n.id === noteId ? { ...n, comments: [...(n.comments || []), newComment] } : n)),
+    }));
+  },
+  resolveComment: (noteId, commentId) => {
+    set((state) => ({
+      notes: state.notes.map((n) =>
+        n.id === noteId
+          ? { ...n, comments: (n.comments || []).map((c) => (c.id === commentId ? { ...c, resolved: true } : c)) }
+          : n
+      ),
+    }));
+  },
+  addVersion: (noteId) => {
+    const note = get().notes.find((n) => n.id === noteId);
+    if (!note) return;
+    const version: NoteVersion = {
+      id: `v-${Date.now()}`,
+      noteId,
+      content: note.content,
+      title: note.title,
+      createdAt: new Date(),
+    };
+    set((state) => ({
+      notes: state.notes.map((n) => (n.id === noteId ? { ...n, versions: [version, ...(n.versions || [])] } : n)),
+    }));
+  },
+  diffVersions: (noteId, a, b) => {
+    const note = get().notes.find((n) => n.id === noteId);
+    const va = note?.versions?.find((v) => v.id === a);
+    const vb = note?.versions?.find((v) => v.id === b);
+    if (!va || !vb) return { added: [], removed: [], changed: [] };
+    const aWords = new Set(va.content.split(/\s+/));
+    const bWords = new Set(vb.content.split(/\s+/));
+    const added = [...bWords].filter((w) => !aWords.has(w));
+    const removed = [...aWords].filter((w) => !bWords.has(w));
+    const changed: string[] = [];
+    return { added, removed, changed };
+  },
+
+  // Offline
+  queueNoteForSync: (noteId) => {
+    set((state) => ({
+      notes: state.notes.map((n) => (n.id === noteId ? { ...n, pendingSync: true, isOffline: true } : n)),
+    }));
+  },
+  markSynced: (noteId) => {
+    set((state) => ({
+      notes: state.notes.map((n) => (n.id === noteId ? { ...n, pendingSync: false, isOffline: false } : n)),
+    }));
   },
 }));

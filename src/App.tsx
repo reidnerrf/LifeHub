@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from './components/ui/sh
 
 import { storage, KEYS } from './services/storage';
 import { api } from './services/api';
+import { collectAndStoreTodayProductivity } from './services/productivityCollector';
 
 // Lazy load components for better performance
 const SplashScreen = lazy(() => import('./components/SplashScreen'));
@@ -61,6 +62,11 @@ export default function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [isDarkMode]);
+
+  // Collect and persist today's productivity snapshot on app start
+  useEffect(() => {
+    collectAndStoreTodayProductivity().catch(() => {});
+  }, []);
 
   // Apply font scale and high contrast
   useEffect(() => {

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Button, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, Button, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { offlineSyncService } from '../services/offlineSyncService';
+import { useNotes } from '../store/notes';
+import { offlineDB } from '../services/offline/watermelon';
 
 const OfflineSyncTester: React.FC = () => {
   const [syncStatus, setSyncStatus] = useState(offlineSyncService.getSyncStatus());
@@ -36,6 +38,8 @@ const OfflineSyncTester: React.FC = () => {
     offlineSyncService.clearCompletedOperations();
   };
 
+  const { notes, queueNoteForSync, markSynced } = useNotes();
+
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>Offline Sync Tester</Text>
@@ -65,6 +69,27 @@ const OfflineSyncTester: React.FC = () => {
               {op.timestamp.toLocaleTimeString()} - Retries: {op.retryCount}
             </Text>
             {op.error && <Text style={styles.operationError}>Error: {op.error}</Text>}
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.operationsSection}>
+        <Text style={styles.sectionTitle}>Notas Offline (demo)</Text>
+        {notes.slice(0, 5).map((n) => (
+          <View key={n.id} style={styles.operationItem}>
+            <Text style={styles.operationType}>{n.title}</Text>
+            <Text style={styles.operationStatus}>Pending: {n.pendingSync ? 'Yes' : 'No'}</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity style={styles.smallBtn} onPress={async () => {
+                queueNoteForSync(n.id);
+                await offlineDB.putNote({ id: n.id, title: n.title, content: n.content, notebook: n.notebook, updatedAt: Date.now(), pendingSync: true });
+              }}>
+                <Text style={styles.smallText}>Queue</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.smallBtn} onPress={() => markSynced(n.id)}>
+                <Text style={styles.smallText}>Mark Synced</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         ))}
       </View>
@@ -150,4 +175,11 @@ const styles = StyleSheet.create({
     color: 'red',
     fontStyle: 'italic',
   },
+  smallBtn: {
+    backgroundColor: '#eef3ff',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  smallText: { color: '#2d5bd1', fontWeight: '600' },
 });

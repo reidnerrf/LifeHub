@@ -77,7 +77,7 @@ export interface CloudBackup {
 export interface Integration {
   id: string;
   name: string;
-  provider: 'google' | 'trello' | 'icloud' | 'notion' | 'slack' | 'github';
+  provider: 'google' | 'trello' | 'icloud' | 'notion' | 'slack' | 'github' | 'asana';
   icon: string;
   isConnected: boolean;
   lastSync: Date | null;
@@ -85,6 +85,19 @@ export interface Integration {
   syncFrequency: 'realtime' | 'hourly' | 'daily';
   permissions: string[];
   dataTypes: string[];
+}
+
+export interface ImportSettings {
+  trello?: {
+    defaultBoardId?: string;
+    defaultListId?: string;
+    importCompletedCards?: boolean;
+  };
+  asana?: {
+    defaultWorkspaceId?: string;
+    defaultProjectId?: string;
+    includeSubtasks?: boolean;
+  };
 }
 
 export interface NotificationSettings {
@@ -149,6 +162,7 @@ interface SettingsStore {
   integrations: Integration[];
   notifications: NotificationSettings[];
   smartNotifications: SmartNotification[];
+  importSettings: ImportSettings;
   
   // Estado atual
   isLoading: boolean;
@@ -217,6 +231,8 @@ interface SettingsStore {
   disconnectIntegration: (id: string) => void;
   syncIntegration: (id: string) => Promise<boolean>;
   getIntegrations: () => Integration[];
+  // Import config
+  updateImportSettings: (updates: Partial<ImportSettings>) => void;
   
   // Ações para Notificações
   addNotification: (notification: Omit<NotificationSettings, 'id'>) => void;
@@ -474,6 +490,10 @@ export const useSettings = create<SettingsStore>((set, get) => ({
       dataTypes: ['notes', 'tasks'],
     },
   ],
+  importSettings: {
+    trello: { importCompletedCards: false },
+    asana: { includeSubtasks: true },
+  },
   notifications: [
     {
       id: 'task-reminders',
@@ -949,6 +969,12 @@ export const useSettings = create<SettingsStore>((set, get) => ({
   getIntegrations: () => {
     const { integrations } = get();
     return integrations;
+  },
+
+  updateImportSettings: (updates) => {
+    set((state) => ({
+      importSettings: { ...state.importSettings, ...updates },
+    }));
   },
 
   addNotification: (notification) => {

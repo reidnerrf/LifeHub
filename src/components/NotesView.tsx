@@ -106,6 +106,18 @@ const NotesView: React.FC = () => {
     { id: 'image', label: 'Imagem', count: notes.filter(n => n.type === 'image').length },
   ];
 
+  const parseChecklist = (content: string) => {
+    const lines = content.split('\n');
+    const items = lines.filter(l => /^- \[[ xX]\]/.test(l.trim()));
+    const done = items.filter(l => /^- \[[xX]\]/.test(l.trim())).length;
+    return { total: items.length, done };
+  };
+
+  const getProgress = (n: any) => {
+    const { total, done } = parseChecklist(n.content || '');
+    return total > 0 ? Math.round((done / total) * 100) : 0;
+  };
+
   const getFilteredNotes = () => {
     let filtered = notes;
 
@@ -125,7 +137,7 @@ const NotesView: React.FC = () => {
       );
     }
 
-    return filtered;
+    return filtered.map(n => ({ ...n, progress: getProgress(n) }));
   };
 
   const getTypeIcon = (type: string) => {
@@ -278,6 +290,32 @@ const NotesView: React.FC = () => {
             <p className="text-sm text-[var(--app-text-light)] mb-3 line-clamp-3">
               {truncateContent(note.content)}
             </p>
+
+            {typeof (note as any).progress === 'number' && (note as any).progress > 0 && (
+              <div className="flex items-center space-x-2 mb-3">
+                <div className="w-32 h-2 bg-[var(--app-light-gray)] rounded-full">
+                  <div
+                    className="h-2 rounded-full"
+                    style={{ backgroundColor: note.color, width: `${(note as any).progress}%` }}
+                  />
+                </div>
+                <span className="text-xs text-[var(--app-text-light)]">{(note as any).progress}%</span>
+                <button
+                  className="text-xs px-2 py-1 rounded-lg bg-[var(--app-light-gray)]"
+                  onClick={() => {
+                    const lines = note.content.split('\n');
+                    const idx = lines.findIndex(l => /^- \[[ ]\]/.test(l.trim()));
+                    if (idx >= 0) {
+                      lines[idx] = lines[idx].replace('- [ ]', '- [x]');
+                      const updatedContent = lines.join('\n');
+                      setNotes(prev => prev.map(n => n.id === note.id ? { ...n, content: updatedContent } : n));
+                    }
+                  }}
+                >
+                  +1
+                </button>
+              </div>
+            )}
 
             {note.type === 'audio' && note.duration && (
               <div className="flex items-center space-x-2 mb-3">
