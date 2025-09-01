@@ -11,6 +11,7 @@ export interface Note {
   aiSummary?: string;
   isPinned: boolean;
   isArchived: boolean;
+  progress?: number;
   // Collaboration & offline
   sharedWith?: { userId: string; permission: 'view' | 'comment' | 'edit' }[];
   comments?: NoteComment[];
