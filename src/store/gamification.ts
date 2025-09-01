@@ -548,7 +548,9 @@ export const useGamification = create<GamificationStore>((set, get) => ({
 
   addExperience: (amount) => {
     set(state => {
-      const newExperience = state.userProfile.experience + amount;
+      const streakBonus = Math.min(20, Math.floor((state.userProfile.currentStreak || 0) / 5) * 2);
+      const total = amount + streakBonus;
+      const newExperience = state.userProfile.experience + total;
       const experienceToNextLevel = state.userProfile.level * 100;
 
       if (newExperience >= experienceToNextLevel) {
@@ -583,13 +585,20 @@ export const useGamification = create<GamificationStore>((set, get) => ({
   },
 
   addPoints: (amount) => {
-    set(state => ({
-      userProfile: {
-        ...state.userProfile,
-        totalPoints: state.userProfile.totalPoints + amount,
-        lastActive: new Date(),
-      },
-    }));
+    set(state => {
+      const stats = get().getGamificationStats();
+      const progressFactor = Math.min(1, (stats.achievementsUnlocked + stats.questsCompleted) / (stats.totalAchievements + 1));
+      const streakMultiplier = 1 + Math.min(0.5, (state.userProfile.currentStreak || 0) * 0.02);
+      const bonus = Math.floor(amount * progressFactor * 0.2);
+      const total = Math.floor((amount + bonus) * streakMultiplier);
+      return {
+        userProfile: {
+          ...state.userProfile,
+          totalPoints: state.userProfile.totalPoints + total,
+          lastActive: new Date(),
+        },
+      };
+    });
   },
 
   updateStreak: (type, increment) => {
@@ -871,13 +880,14 @@ export const useGamification = create<GamificationStore>((set, get) => ({
         rewardAnimationExperience: quest.rewards.experience,
       });
 
+      const streakBoost = Math.min(30, state.userProfile.currentStreak * 2);
       return {
         quests: state.quests.map(q =>
           q.id === questId ? updatedQuest : q
         ),
         userProfile: {
           ...state.userProfile,
-          totalPoints: state.userProfile.totalPoints + quest.rewards.points,
+          totalPoints: state.userProfile.totalPoints + quest.rewards.points + streakBoost,
           lastActive: new Date(),
         },
       };

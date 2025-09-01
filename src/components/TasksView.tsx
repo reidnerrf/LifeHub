@@ -166,6 +166,65 @@ const TasksView: React.FC = () => {
       {task.description && (
         <p className="text-xs text-[var(--app-gray)] mb-3 line-clamp-2">{task.description}</p>
       )}
+
+      {Array.isArray(task.subtasks) && task.subtasks.length > 0 && (
+        <div className="mb-3">
+          <div className="w-full h-2 bg-[var(--app-light-gray)] rounded-full mb-2">
+            <div
+              className="h-2 rounded-full bg-[var(--app-blue)]"
+              style={{ width: `${Math.round((task.subtasks.filter((s: any) => s.completed).length / task.subtasks.length) * 100)}%` }}
+            />
+          </div>
+          <div className="space-y-1">
+            {task.subtasks.slice(0, 3).map((s: any) => (
+              <div key={s.id} className="flex items-center justify-between text-xs">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={!!s.completed}
+                    onChange={() => {
+                      setTasks(prev => ({
+                        ...prev,
+                        todo: prev.todo.map(t => t.id === task.id ? { ...t, subtasks: t.subtasks.map((x: any) => x.id === s.id ? { ...x, completed: !x.completed } : x) } : t),
+                        inProgress: prev.inProgress.map(t => t.id === task.id ? { ...t, subtasks: t.subtasks.map((x: any) => x.id === s.id ? { ...x, completed: !x.completed } : x) } : t),
+                        done: prev.done.map(t => t.id === task.id ? { ...t, subtasks: t.subtasks.map((x: any) => x.id === s.id ? { ...x, completed: !x.completed } : x) } : t),
+                      }));
+                    }}
+                  />
+                  <span className={s.completed ? 'line-through text-[var(--app-gray)]' : ''}>{s.title}</span>
+                </label>
+                <button
+                  className="px-2 py-0.5 rounded bg-[var(--app-light-gray)]"
+                  onClick={() => {
+                    const title = prompt('Editar sub-tarefa', s.title);
+                    if (!title) return;
+                    setTasks(prev => ({
+                      ...prev,
+                      todo: prev.todo.map(t => t.id === task.id ? { ...t, subtasks: t.subtasks.map((x: any) => x.id === s.id ? { ...x, title } : x) } : t),
+                      inProgress: prev.inProgress.map(t => t.id === task.id ? { ...t, subtasks: t.subtasks.map((x: any) => x.id === s.id ? { ...x, title } : x) } : t),
+                      done: prev.done.map(t => t.id === task.id ? { ...t, subtasks: t.subtasks.map((x: any) => x.id === s.id ? { ...x, title } : x) } : t),
+                    }));
+                  }}
+                >Editar</button>
+              </div>
+            ))}
+          </div>
+          <button
+            className="mt-2 text-xs px-2 py-1 rounded-lg bg-[var(--app-light-gray)]"
+            onClick={() => {
+              const title = prompt('Nova sub-tarefa');
+              if (!title) return;
+              const sub = { id: Date.now(), title, completed: false };
+              setTasks(prev => ({
+                ...prev,
+                todo: prev.todo.map(t => t.id === task.id ? { ...t, subtasks: [...(t.subtasks || []), sub] } : t),
+                inProgress: prev.inProgress.map(t => t.id === task.id ? { ...t, subtasks: [...(t.subtasks || []), sub] } : t),
+                done: prev.done.map(t => t.id === task.id ? { ...t, subtasks: [...(t.subtasks || []), sub] } : t),
+              }));
+            }}
+          >+ Sub-tarefa</button>
+        </div>
+      )}
       
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center space-x-2">

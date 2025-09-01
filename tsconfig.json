@@ -2,5 +2,7 @@
   "compilerOptions": {
     "types": ["vitest/globals"]
   },
-  "extends": "expo/tsconfig.base"
+  "extends": "expo/tsconfig.base",
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "backend"]
 }
